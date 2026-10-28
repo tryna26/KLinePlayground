@@ -1,4 +1,4 @@
- ![top_pic](https://github.com/user-attachments/assets/9da63388-b17e-4235-a691-0e15c03c4fd3)
+
 
 # A股K线复盘训练 - PyWebView桌面版
 
