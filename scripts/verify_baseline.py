@@ -56,6 +56,9 @@ def main():
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         env = {key: value for key, value in os.environ.items() if not key.startswith("KLINE_TRAINER_")}
+        # Exercise the non-Chinese Windows console that exposed a CI startup
+        # failure; run_dev must normalize its own output before printing.
+        env["PYTHONIOENCODING"] = "cp1252"
         command = [sys.executable, str(ROOT / "run_dev.py"), "--home", str(root / "unused-home"),
                    "--data-dir", str(data_dir), "--users-dir", str(users_dir), "--port", str(port)]
         log_path = root / "server.log"

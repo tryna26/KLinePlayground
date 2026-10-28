@@ -2,9 +2,15 @@
 
 import argparse
 import os
+import sys
 
 
 def main():
+    # Redirected Windows consoles can default to cp1252. Startup messages and
+    # backend diagnostics must remain printable in every Windows locale.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser(description="KLinePlayground 开发启动入口")
     parser.add_argument("--home", help="运行根目录（默认 .runtime）")
     parser.add_argument("--data-dir", help="独立行情目录")
