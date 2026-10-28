@@ -23,7 +23,9 @@ class RuntimePathsTests(unittest.TestCase):
 
     def test_individual_overrides_include_trade_database_and_ai_files(self):
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
+            # Windows CI may expose TEMP through an 8.3 username alias.
+            # The runtime intentionally returns canonical absolute paths.
+            root = Path(temp).resolve()
             env = {"KLINE_TRAINER_HOME": str(root / "home"),
                    "KLINE_TRAINER_DATA_DIR": str(root / "quotes"),
                    "KLINE_TRAINER_USERS_DIR": str(root / "people")}
@@ -54,7 +56,7 @@ class RuntimePathsTests(unittest.TestCase):
 
     def test_installed_bin_layout_and_home_override(self):
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {}, clear=True):
-            root = Path(temp)
+            root = Path(temp).resolve()
             with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", str(root / "bin" / "app.exe")):
                 self.assertEqual(get_runtime_paths().home, root)
                 with patch.dict(os.environ, {"KLINE_TRAINER_HOME": str(root / "custom")}):
