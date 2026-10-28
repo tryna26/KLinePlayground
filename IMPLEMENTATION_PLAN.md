@@ -2,7 +2,7 @@
 
 更新时间：2026-10-28
 
-当前阶段：阶段一至阶段五“实现组合训练界面”已完成并验收。详见 `docs/STEP1_VERIFICATION.md` 至 `docs/STEP5_VERIFICATION.md`、`docs/PORTFOLIO_UI.md`、`docs/DATA_REPLAY.md`、`docs/PORTFOLIO_ENGINE.md` 和 `docs/PORTFOLIO_API.md`。后续界面反馈已加入顶部图表视图切换和首批新浪真实日线：浦发、平安、招商银行，2024-01-02 至 2024-06-12，完成真实行情交易、重启恢复与浏览器验收，见 `docs/REAL_DATA_VERIFICATION.md`。其他真实区间缺少公司行为或历史状态完整性证明时仍明确拒绝。阶段六 Windows x64 候选包、独立安装/便携验收、文档和许可清单已完成，见 docs/STEP6_VERIFICATION.md；GitHub 发布检查在下方记录。
+当前阶段：阶段一至阶段六“实现组合训练界面”已完成并验收。详见 `docs/STEP1_VERIFICATION.md` 至 `docs/STEP5_VERIFICATION.md`、`docs/PORTFOLIO_UI.md`、`docs/DATA_REPLAY.md`、`docs/PORTFOLIO_ENGINE.md` 和 `docs/PORTFOLIO_API.md`。后续界面反馈已加入顶部图表视图切换和首批新浪真实日线：浦发、平安、招商银行，2024-01-02 至 2024-06-12，完成真实行情交易、重启恢复与浏览器验收，见 `docs/REAL_DATA_VERIFICATION.md`。其他真实区间缺少公司行为或历史状态完整性证明时仍明确拒绝。阶段六 Windows x64 候选包、独立安装/便携验收、文档和许可清单已完成，见 docs/STEP6_VERIFICATION.md；GitHub 公开 Fork 为 tryna26/KLinePlayground，源码分支 codex/portfolio-v4-release，候选版 v4.0.0-rc.1 通过 Releases 分发。
 
 ## 1. 要做成什么
 
@@ -229,17 +229,17 @@ ST、退市整理等特殊状态股票，仅在具备对应历史状态和规则
 
 原项目采用 MIT 许可证，允许在保留规定的版权及许可声明后修改和分发。发布前以实际纳入代码和依赖的许可证为准。
 
-- [ ] 优先以原项目 Fork 形式发布，保留上游历史和来源链接。
-- [ ] 保留原 MIT `LICENSE`、作者署名和第三方组件必要声明。
-- [ ] README 说明基于 KLinePlayground，列出新增功能、支持范围和使用限制。
-- [ ] 对新增代码说明维护者和许可安排，不删除原作者版权信息。
-- [ ] 检查图表库、图标和其他资源的许可及署名要求。
-- [ ] 不上传真实用户记录、行情缓存、数据库、日志、密钥、加密配置、虚拟环境、备份或私人路径。
-- [ ] 测试数据采用明确标注的合成样本；行情数据分发权单独核实，不能由代码 MIT 许可推导。
-- [ ] 检查整个待发布 Git 历史，避免只删除工作区文件而遗漏历史中的敏感内容。
-- [ ] 在干净目录按 README 完成安装及运行验证。
-- [ ] 准备版本说明、截图和安装包校验值；安装包通过 Releases 分发。
-- [ ] 项目名称、GitHub 账号和仓库位置在实际发布时确定。
+- [x] 优先以原项目 Fork 形式发布，保留上游历史和来源链接。
+- [x] 保留原 MIT `LICENSE`、作者署名和第三方组件必要声明。
+- [x] README 说明基于 KLinePlayground，列出新增功能、支持范围和使用限制。
+- [x] 对新增代码说明维护者和许可安排，不删除原作者版权信息。
+- [x] 检查图表库、图标和其他资源的许可及署名要求。
+- [x] 不上传真实用户记录、行情缓存、数据库、日志、密钥、加密配置、虚拟环境、备份或私人路径。
+- [x] 测试数据采用明确标注的合成样本；行情数据分发权单独核实，不能由代码 MIT 许可推导。
+- [x] 检查整个待发布 Git 历史，避免只删除工作区文件而遗漏历史中的敏感内容。
+- [x] 在干净目录按 README 完成安装及运行验证。
+- [x] 准备版本说明、截图和安装包校验值；安装包通过 Releases 分发。
+- [x] 项目名称、GitHub 账号和仓库位置在实际发布时确定。
 
 用户已于阶段六验收后授权上传 GitHub，并明确选择公开 Fork。目标：tryna26/KLinePlayground；保留上游关系及历史，候选安装包通过 Releases 分发。
 
