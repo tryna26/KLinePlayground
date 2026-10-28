@@ -5,6 +5,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import pandas as pd
+from backend.runtime_paths import get_runtime_paths
 
 
 def calculate_trade_performance(trade_history):
@@ -78,7 +79,7 @@ def calculate_trade_performance(trade_history):
 class TradeSimulatorEnhanced:
     """增强版交易模拟器，支持持仓汇总、佣金设置、bar ID记录等功能"""
     
-    def __init__(self, user: str, initial_capital: float, stock_code: str):
+    def __init__(self, user: str, initial_capital: float, stock_code: str, users_dir=None):
         self.user = user
         self.stock_code = stock_code
         self.initial_capital = initial_capital
@@ -104,7 +105,8 @@ class TradeSimulatorEnhanced:
         self.trade_history = []
         
         # 数据库连接
-        self.db_path = f'../users/{user}/trade_records.db'
+        storage = users_dir if users_dir is not None else get_runtime_paths().users
+        self.db_path = os.path.join(storage, user, 'trade_records.db')
         self._init_database()
     
     def _init_database(self):

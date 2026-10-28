@@ -2,6 +2,18 @@
 
 # A股K线复盘训练 - PyWebView桌面版
 
+> 本 Fork 基于 [fat7/KLinePlayground v3.2](https://github.com/fat7/KLinePlayground)，由 tryna26 维护组合训练改造，保留上游历史与 MIT 署名。阶段一至六的实现、测试、文档和 Windows 候选包已完成，版本为 **4.0.0-rc.1**。
+>
+> **直接使用：[下载 Windows 候选包](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.1) · [新手指南](docs/USER_GUIDE.md)**。支持共享资金、多股持仓、下一开盘成交、T+1、自动保存、自动播放、均线和上方“单股 K 线 / 多股对比”视图切换。
+>
+> 首批新浪真实日线仅开放浦发 / 平安 / 招商银行，**2024-01-02 至 2024-06-12**。首次点击“接入 / 更新真实数据”；其他股票或日期缺少核验仍会阻止开始。来源及限制见 [真实数据接入](docs/REAL_DATA_VERIFICATION.md)。
+>
+> Windows x64 候选包需要 Microsoft Edge WebView2 Runtime，未做代码签名；安装包和便携包附 SHA256，不附真实行情库、用户记录或 API 凭据。原单股入口保留，旧独立 AI 测试器不在本候选包内；下方保留上游历史功能介绍。
+>
+> 开发使用标准 Python **3.13.17** 和固定依赖，从 `python run_dev.py` 启动。合成样本需显式 `--portfolio-demo`，真实数据不需要此开关。[开发说明](docs/DEVELOPMENT.md) · [构建指南](BUILD_GUIDE.md) · [阶段六验收](docs/STEP6_VERIFICATION.md) · [故障排查](docs/TROUBLESHOOTING.md) · [基线与来源](docs/BASELINE.md)。
+
+![安装版组合训练](docs/screenshots/phase6-installed-comparison.png)
+
 [![支持与服务](https://img.shields.io/badge/Support%20%26%20Services-联系作者-blue?style=for-the-badge )](https://github.com/fat7/KLinePlayground#%E2%9A%99%EF%B8%8F-%E6%94%AF%E6%8C%81%E4%B8%8E%E6%9C%8D%E5%8A%A1 )
 
 一款专为A股投资者设计的专业级K线复盘与模拟交易训练工具。深度模拟真实交易环境，支持动态复权、多维度技术指标及AI辅助点评。
@@ -87,7 +99,7 @@ pip install -r requirements.txt
 ### 运行程序
 1. **桌面客户端 (推荐)**:
    ```bash
-   python webview_app/main_pywebview.py
+   python run_dev.py --desktop
    ```
 2. **AI 介入测试器**:
    ```bash
@@ -95,7 +107,7 @@ pip install -r requirements.txt
    ```
 3. **Web 服务版 (CLI模式)**:
    ```bash
-   python main_enhanced.py
+   python run_dev.py
    ```
 
 ---
@@ -106,7 +118,7 @@ pip install -r requirements.txt
 | `ai_assistant_tester.py` | AI 介入与策略测试工具 |
 | `backend/` | 包含 `app_enhanced.py` 等所有核心逻辑 |
 | `frontend/` | 包含 `index_enhanced.html` 及其 JS/CSS 资源 |
-| `main_enhanced.py` | CLI/Web 模式启动入口 |
+| `run_dev.py` | 开发 Web / 桌面启动入口，支持独立数据和用户目录 |
 | `requirements.txt` | 环境依赖列表 |
 
 

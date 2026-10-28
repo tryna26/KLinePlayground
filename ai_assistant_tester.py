@@ -46,7 +46,8 @@ def get_frontend_dir() -> Path:
 
 
 def get_data_dir() -> Path:
-    return get_project_root() / "data"
+    from backend.runtime_paths import get_runtime_paths
+    return get_runtime_paths().data
 
 
 def get_api_info_path() -> Path:

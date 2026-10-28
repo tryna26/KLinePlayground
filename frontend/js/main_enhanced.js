@@ -1180,7 +1180,7 @@ function showDataSyncModal() {
         endInput.value = new Date().toISOString().split('T')[0];
     }
     if (sourceSelect && !sourceSelect.value) {
-        sourceSelect.value = 'akshare';
+        sourceSelect.value = 'tencent';
     }
     if (forceFull) forceFull.checked = false;
     if (scopeSelect && !scopeSelect.value) {
@@ -1279,7 +1279,7 @@ async function syncSingleStock(stockCode, source, startDate, endDate, forceFull)
 async function syncOfflineData() {
     const scope = document.getElementById('sync-scope')?.value || 'single';
     const stockCode = document.getElementById('sync-stock-code')?.value.trim();
-    const source = document.getElementById('sync-source')?.value || 'akshare';
+    const source = document.getElementById('sync-source')?.value || 'tencent';
     const startDate = document.getElementById('sync-start-date')?.value || '';
     const endDate = document.getElementById('sync-end-date')?.value || '';
     const forceFull = !!document.getElementById('sync-force-full')?.checked;
@@ -1694,7 +1694,7 @@ async function switchViewPeriod(period) {
 async function startTraining() {
     const isRandomMode = document.querySelector('.tab-btn.active').dataset.tab === 'random';
     const initialCapital = parseFloat(document.getElementById('initial-capital').value);
-    const dataSource = document.getElementById('data-source').value || 'akshare';
+    const dataSource = document.getElementById('data-source').value || 'tencent';
     const period = 'daily';
 
     let trainingConfig = {

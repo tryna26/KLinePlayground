@@ -17,6 +17,10 @@ from backend.data_manager import DataManager
 from backend.kline_processor_enhanced import KLineProcessorEnhanced
 from backend.trade_simulator_enhanced import TradeSimulatorEnhanced
 from backend.user_manager_enhanced import UserManagerEnhanced
+from backend.runtime_paths import get_runtime_paths
+from backend.portfolio_repository import PortfolioRepository
+from backend.portfolio_routes import register_portfolio_routes
+from backend.portfolio_data_service import replay_factory as portfolio_replay_factory
 
 # 配置Flask以提供静态文件，支持开发环境和 PyInstaller 打包环境
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -29,20 +33,22 @@ else:
 app = Flask(__name__, static_folder=frontend_folder, static_url_path='/')
 CORS(app)  # 允许跨域请求
 
-# 获取项目根目录，确保路径在项目内
-if getattr(sys, 'frozen', False):
-    # project_root = os.path.dirname(sys.executable)
-    project_root = os.path.join(os.path.dirname(sys.executable), '..')
-else:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-users_dir_path = os.path.join(project_root, 'users')
-data_dir_path = os.path.join(project_root, 'data')
+# Writable storage is shared by the web and desktop launchers.
+runtime_paths = get_runtime_paths()
+users_dir_path = str(runtime_paths.users)
+data_dir_path = str(runtime_paths.data)
 
 # 初始化管理器
 data_manager = DataManager(data_dir=data_dir_path)
 # user_manager = UserManager()
 user_manager = UserManagerEnhanced(users_dir=users_dir_path)
 active_trainings = {}  # 存储活跃的训练会话
+
+portfolio_repository = PortfolioRepository(runtime_paths.users / "portfolio.sqlite3")
+register_portfolio_routes(app, portfolio_repository, user_manager,
+    portfolio_replay_factory(runtime_paths.data,
+        allow_demo=os.environ.get("KLINE_TRAINER_PORTFOLIO_DEMO") == "1",
+        stock_names=lambda: data_manager.stock_names))
 
 @app.route('/')
 def index():
@@ -145,10 +151,7 @@ def get_user_statistics(username):
 
 def _update_api_info(user=None, enable=None):
     """更新或删除 api_info.json"""
-    if getattr(sys, 'frozen', False):
-        api_file_path = os.path.join(os.path.dirname(sys.executable), '..', 'data', 'ai_api_info.json')
-    else:
-        api_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'ai_api_info.json')
+    api_file_path = os.path.join(data_dir_path, 'ai_api_info.json')
     
     if enable is None and user:
         user_config = user_manager.get_user_config(user)
@@ -194,10 +197,7 @@ def _update_api_info(user=None, enable=None):
         print(f"写入 ai_api_info.json 失败: {e}")
 
 def get_ai_config():
-    if getattr(sys, 'frozen', False):
-        config_file = os.path.join(os.path.dirname(sys.executable), '..', 'data', '.ai_tester_config.enc')
-    else:
-        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', '.ai_tester_config.enc')
+    config_file = os.path.join(data_dir_path, '.ai_tester_config.enc')
         
     if not os.path.exists(config_file):
         return None
@@ -299,7 +299,7 @@ def start_training():
             return jsonify({'error': '用户名不能为空'}), 400
         
         # 创建训练会话
-        training_id = f"{user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        training_id = f"{user}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         
         if mode == 'random':
             # 随机模式
@@ -336,7 +336,7 @@ def start_training():
         
         # 创建增强版K线处理器和交易模拟器
         kline_processor = KLineProcessorEnhanced(data_manager, stock_code, start_date, source=data_source, interval=period)
-        trade_simulator = TradeSimulatorEnhanced(user, initial_capital, stock_code)
+        trade_simulator = TradeSimulatorEnhanced(user, initial_capital, stock_code, users_dir=users_dir_path)
         
         # 获取用户设置并应用到交易模拟器
         user_config = user_manager.get_user_config(user)
@@ -347,6 +347,26 @@ def start_training():
                 settings.get('min_commission', 5.0),
                 settings.get('stamp_tax_rate', 0.001)
             )
+
+        # Initialize valuation before the first trade or account request.
+        current_bar = kline_processor.get_current_bar()
+        trade_simulator.update_current_price(current_bar['close'], current_bar['bar_id'])
+
+        # Completion updates an existing row; create it when training starts.
+        if not user_manager.start_training_session(user, {
+            'session_id': training_id,
+            'stock_code': stock_code,
+            'stock_name': data_manager.get_stock_name(stock_code),
+            'start_date': start_date,
+            'mode': mode,
+            'initial_capital': initial_capital,
+            'commission_settings': {
+                'commission_rate': trade_simulator.commission_rate,
+                'min_commission': trade_simulator.min_commission,
+                'stamp_tax_rate': trade_simulator.stamp_tax_rate,
+            },
+        }):
+            return jsonify({'error': '无法保存训练记录，请检查用户目录权限'}), 500
         
         # 存储训练会话
         active_trainings[training_id] = {
@@ -900,9 +920,4 @@ def health_check():
     })
 
 if __name__ == '__main__':
-    # 确保数据目录存在
-    os.makedirs('../data', exist_ok=True)
-    os.makedirs('../users', exist_ok=True)
-    
-    # 启动Flask应用
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='127.0.0.1', port=5050, debug=False, use_reloader=False)

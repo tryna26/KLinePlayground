@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 import akshare as ak
 import pandas as pd
+from backend.tencent_source import fetch_bundle as fetch_tencent_bundle
 
 try:
     from xtquant import xtdata
@@ -82,6 +83,15 @@ class DataManager:
     def get_available_sources(self) -> List[Dict]:
         """返回当前可用数据源列表。"""
         return [
+            {
+                "value": "tencent",
+                "label": "腾讯行情（沪深，推荐）",
+                "available": True,
+                "kind": "online",
+                "supports_incremental_sync": True,
+                "supports_factor": True,
+                "description": "腾讯历史日线，支持本地缓存与复权行情。",
+            },
             {
                 "value": "akshare",
                 "label": "AKShare",
@@ -606,7 +616,7 @@ class DataManager:
         return range_start, range_end
 
     def _supports_factor_refresh(self, source: str) -> bool:
-        return source in {"akshare", "xtdata"}
+        return source in {"akshare", "xtdata", "tencent"}
 
     def _fetch_stock_bundle(
         self,
@@ -615,11 +625,19 @@ class DataManager:
         source: str,
         end_date: Optional[str] = None,
     ) -> Dict[str, Optional[pd.DataFrame]]:
+        if source == "tencent":
+            return fetch_tencent_bundle(stock_code, start_date, end_date)
         if source == "xtdata":
             return self._fetch_stock_bundle_xt(stock_code, start_date, end_date=end_date)
         if source == "mootdx":
             return self._fetch_stock_bundle_mootdx(stock_code, start_date, end_date=end_date)
-        return self._fetch_stock_bundle_ak(stock_code, start_date, end_date=end_date)
+        try:
+            bundle = self._fetch_stock_bundle_ak(stock_code, start_date, end_date=end_date)
+            if bundle.get("kline") is not None and not bundle["kline"].empty:
+                return bundle
+        except Exception as exc:
+            print(f"东方财富行情不可用，改用腾讯备用源: {exc}")
+        return fetch_tencent_bundle(stock_code, start_date, end_date)
 
     def _fetch_stock_bundle_ak(
         self,
@@ -634,6 +652,7 @@ class DataManager:
             start_date=start_date.replace("-", ""),
             end_date=end_date,
             adjust="",
+            timeout=8,
         )
         daily_df = self._normalize_daily_kline(raw_daily)
         if daily_df is None or daily_df.empty:
@@ -647,6 +666,7 @@ class DataManager:
                 start_date=start_date.replace("-", ""),
                 end_date=end_date,
                 adjust="qfq",
+                timeout=8,
             )
             factor_df = self._normalize_factor_data(raw_qfq, daily_df)
         except Exception as e:
@@ -806,6 +826,9 @@ class DataManager:
     ) -> Optional[pd.DataFrame]:
         if not self._supports_factor_refresh(source):
             return None
+
+        if source == "tencent":
+            return fetch_tencent_bundle(stock_code, start_date, end_date).get("factor")
 
         start_dt = pd.to_datetime(start_date).normalize()
         end_dt = pd.to_datetime(end_date).normalize()

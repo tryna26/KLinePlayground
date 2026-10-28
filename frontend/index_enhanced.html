@@ -76,6 +76,7 @@
                 <button id="data-sync-btn" class="btn btn-secondary">数据更新器</button>
                 <button id="settings-btn" class="btn btn-secondary">设置</button>
                 <button id="new-training-btn" class="btn btn-primary">新建训练</button>
+                <a href="portfolio.html" class="btn btn-secondary">组合训练</a>
             </div>
         </div>
 
@@ -177,6 +178,7 @@
         <div id="training-setup" class="modal hidden">
             <div class="modal-content">
                 <h2>新建训练</h2>
+                <p><a href="portfolio.html">进入多股票组合训练 →</a></p>
                 <div class="setup-tabs">
                     <button class="tab-btn active" data-tab="specified">指定模式</button>
                     <button class="tab-btn" data-tab="random">盲盒模式</button>
@@ -217,7 +219,8 @@
                     <div class="form-group">
                         <label>数据源</label>
                         <select id="data-source">
-                            <option value="akshare" selected>AKShare（免费公网）</option>
+                            <option value="tencent" selected>腾讯行情（沪深，推荐）</option>
+                            <option value="akshare">AKShare（免费公网）</option>
                             <option value="xtdata">xtdata / XTQuant（本地）</option>
                             <option value="mootdx">mootdx（通达信协议）</option>
                             <option value="offline">本地离线数据</option>
@@ -264,7 +267,8 @@
                     <div class="form-group">
                         <label>在线数据源</label>
                         <select id="sync-source">
-                            <option value="akshare" selected>AKShare</option>
+                            <option value="tencent" selected>腾讯行情（沪深，推荐）</option>
+                            <option value="akshare">AKShare</option>
                             <option value="xtdata" hidden>xtdata / XTQuant</option>
                             <option value="mootdx" hidden>mootdx</option>
                         </select>
