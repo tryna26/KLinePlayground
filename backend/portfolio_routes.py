@@ -92,14 +92,28 @@ def register_portfolio_routes(app, repository, users, replay_factory):
     @api.post("/trainings")
     @authenticated
     def create(owner):
-        data = body(("request_id", "stocks", "start_date", "end_date"), ("initial_cash", "data_source"))
+        data = body(("request_id", "start_date", "end_date"), ("stocks", "initial_cash", "data_source", "mode", "stock_count", "training_days", "sector"))
         identifier(data["request_id"])
         validate_creation(data)
         return jsonify(repository.create(owner, data, replay_factory)), 201
 
     def validate_creation(data):
-        if not isinstance(data["stocks"], list) or not 1 <= len(data["stocks"]) <= 20:
-            raise ReplayDataError("股票池须包含 1 至 20 个沪深主板股票代码")
+        data.setdefault("mode", "specified")
+        if data["mode"] not in {"specified", "random"}:
+            raise ReplayDataError("请选择指定模式或随机盲盒")
+        if data["mode"] == "random":
+            data["stocks"] = []
+            data.setdefault("stock_count", 3)
+            data.setdefault("training_days", 60)
+            data.setdefault("sector", "all")
+            if type(data["stock_count"]) is not int or not 1 <= data["stock_count"] <= 20:
+                raise ReplayDataError("盲盒股票数量须为 1 至 20")
+            if type(data["training_days"]) is not int or not 2 <= data["training_days"] <= 1000:
+                raise ReplayDataError("盲盒训练时长须为 2 至 1000 个交易日")
+            if data["sector"] not in {"all", "main", "gem", "sme"}:
+                raise ReplayDataError("不支持的板块筛选")
+        elif not isinstance(data.get("stocks"), list) or not 1 <= len(data["stocks"]) <= 20:
+            raise ReplayDataError("股票池须包含 1 至 20 个 A 股股票代码")
         data["stocks"] = [stock_code(code) for code in data["stocks"]]
         if len(set(data["stocks"])) != len(data["stocks"]):
             raise ReplayDataError("股票池包含重复股票")
@@ -111,8 +125,10 @@ def register_portfolio_routes(app, repository, users, replay_factory):
             raise ReplayDataError("初始资金须大于零、不超过一万亿元且最多两位小数")
         data["initial_cash"] = str(money(initial))
         data.setdefault("data_source", "tencent")
-        if data["data_source"] not in ("tencent", "sina", "synthetic-demo", "synthetic-practice"):
+        if data["data_source"] not in ("tencent", "akshare", "xtdata", "mootdx", "offline", "sina", "synthetic-demo", "synthetic-practice"):
             raise ReplayDataError("不支持的组合数据源")
+        if data["mode"] == "random" and data["data_source"] not in {"tencent", "akshare", "xtdata", "mootdx", "offline"}:
+            raise ReplayDataError("随机盲盒请选择与单股训练相同的日线数据源")
 
     @api.get("/options")
     @authenticated
@@ -125,7 +141,7 @@ def register_portfolio_routes(app, repository, users, replay_factory):
     @api.post("/preview")
     @authenticated
     def preview(owner):
-        data = body(("stocks", "start_date", "end_date"), ("initial_cash", "data_source"))
+        data = body(("start_date", "end_date"), ("stocks", "initial_cash", "data_source", "mode", "stock_count", "training_days", "sector"))
         validate_creation(data)
         return jsonify(replay_factory.preview(data))
 

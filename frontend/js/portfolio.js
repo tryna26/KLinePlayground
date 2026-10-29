@@ -31,7 +31,7 @@
     }
     async function api(url, data) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 30000);
+        const timer = setTimeout(() => controller.abort(), 180000);
         try {
             const response = await fetch(url, {method:data === undefined ? 'GET':'POST',credentials:'same-origin',
                 headers:data === undefined ? {}:{'Content-Type':'application/json'},
@@ -52,9 +52,10 @@
     const metric = (label, value, detail = '', cls = '') => `<div class="metric"><span>${esc(label)}</span><strong class="${cls}">${esc(value)}</strong>${detail ? `<small>${esc(detail)}</small>`:''}</div>`;
     function controls() {
         const locked = busy || !!pending;
-        for (const id of ['profile','check','refresh-list','source','prepare-data','search','cash','start','end','side','quantity','exit','end-training','chart-mode']) $(id).disabled = locked;
+        for (const id of ['profile','check','refresh-list','source','prepare-data','search','cash','start','end','setup-mode','random-count','random-days','random-sector','side','quantity','exit','end-training','chart-mode']) $(id).disabled = locked;
         for (const id of ['side','quantity']) $(id).disabled = locked || state?.status === 'ended';
-        $('create').disabled = locked || checked !== fingerprint() || !selected.size;
+        $('create').disabled = locked || ($('setup-mode').value !== 'random' && !selected.size);
+        $('check').hidden = $('setup-mode').value === 'random';
         $('advance').disabled = locked || playing || !state?.next_date || state?.status !== 'active';
         $('advance').textContent = busy ? '正在推进 / 保存…' : state?.status === 'ended' ? '训练已结束' : state?.next_date ? `下一交易日 → ${state.next_date}` : '已到区间末日';
         $('play').textContent = playing ? '⏸ 暂停播放' : '▶ 自动播放';
@@ -75,10 +76,11 @@
         $('odd-lot-wrap').hidden = buy;
     }
     function fingerprint() {return JSON.stringify(createParams());}
-    function createParams() {return {stocks:[...selected.keys()],start_date:$('start').value,end_date:$('end').value,initial_cash:$('cash').value,data_source:$('source').value};}
+    function createParams() {return {stocks:[...selected.keys()],start_date:$('start').value,end_date:$('end').value,initial_cash:$('cash').value,data_source:$('source').value,
+        mode:$('setup-mode').value,stock_count:Number($('random-count').value),training_days:Number($('random-days').value),sector:$('random-sector').value};}
     function invalidate() {
         checked = null; previewSeq++;
-        $('preview').textContent = '选项已改变，请重新检查股票和日期范围。';
+        $('preview').textContent = '选择完成后直接开始，系统会自动加载所选日期的行情。';
         controls();
     }
     function renderSelected() {
@@ -92,7 +94,7 @@
         if (seq !== searchSeq) return;
         $('search-results').innerHTML = data.stocks.map(row => {
             names.set(row.stock, row.name);
-            const range = row.coverage ? `核验范围 ${row.coverage.start} 至 ${row.coverage.end}` : row.reason;
+            const range = row.coverage ? `数据范围 ${row.coverage.start} 至 ${row.coverage.end}` : row.reason;
             return `<button class="search-result" type="button" data-add="${esc(row.stock)}"><span>${esc(row.stock)} <strong>${esc(row.name)}</strong><small>${esc(range)}</small></span><span>${selected.has(row.stock)?'已选':'＋'}</span></button>`;
         }).join('') || '<div class="empty">未找到结果。也可输入完整六位代码检查支持情况。</div>';
         controls();
@@ -107,9 +109,8 @@
             ? '合成演示：2024-01-02 至 2024-01-10。甲/乙/丙的价格、停牌和上市退市日期均为人工样本。'
             : $('source').value === 'sina'
             ? '真实未复权日线：首批支持浦发银行、平安银行、招商银行，2024-01-02 至 2024-06-12（105 个交易日）。已复核历史状态、分红配股及公共日历；其他股票和日期暂未开放。'
-            : '腾讯未复权日线；仅允许后端已核验历史状态、公司行为及日历的区间。范围不足会明确阻止开始。';
+            : '与单股训练共用日线数据，可自由选择股票和日期；起止日期自动对齐区间内交易日。简化练习采用固定模拟费率，不计分红送转；缺失行情不成交。';
         $('real-data-actions').hidden = $('source').value !== 'sina';
-        if (feeRange) $('source-note').textContent += ` 历史费率覆盖 ${feeRange.start} 至 ${feeRange.end}。`;
         if ($('source').value === 'synthetic-demo') { $('start').value = '2024-01-02'; $('end').value = '2024-01-10'; }
         if ($('source').value === 'synthetic-practice') { $('start').value = '2024-01-02'; $('end').value = '2024-06-28'; }
         invalidate(); renderSelected(); const data = await search();
@@ -189,8 +190,8 @@
                 const prefix=state.config.data_source==='synthetic-practice'?'练习':'合成';
                 for (const [code,label] of [['600000','甲'],['000001','乙'],['600036','丙']]) names.set(code,prefix+label);
             } else {
-                const catalog = await api(`/api/portfolio/options?data_source=${encodeURIComponent(state.config.data_source)}`);
-                for (const row of catalog.stocks) names.set(row.stock,row.name);
+                const catalogs = await Promise.all(state.config.stocks.map(code=>api(`/api/portfolio/options?data_source=${encodeURIComponent(state.config.data_source)}&q=${encodeURIComponent(code)}`)));
+                for (const catalog of catalogs) for (const row of catalog.stocks) names.set(row.stock,row.name);
             }
             selectedStock = state.config.stocks.includes(selectedStock) ? selectedStock : state.config.stocks[0];
             $('lobby').hidden = true; $('workspace').hidden = false;
@@ -203,7 +204,9 @@
         const last = state.daily_assets.at(-1), pnl = Number(last.total_assets)-Number(state.account.initial_cash);
         $('date').textContent = state.current_date;
         $('session-note').textContent = `${state.status === 'ended'?'已结束':'自动保存'} · ${state.config.stocks.length} 只股票 · ${state.config.start_date} 至 ${state.config.end_date}`;
-        $('simulation-note').textContent = state.synthetic ? '合成练习 · 价格、历史状态和交易日历均为人工样本。订单最早在下一公共交易日开盘尝试成交。' : `${state.config.data_source==='sina'?'新浪真实历史日线 · 已核验区间':'腾讯历史日线'} · 使用未复权成交价和历史费率；日线简化模拟无法还原实际盘口与排队。`;
+        $('simulation-note').textContent = state.synthetic ? '合成练习 · 价格、历史状态和交易日历均为人工样本。订单最早在下一公共交易日开盘尝试成交。' : state.config.practice
+            ? `${state.config.data_source} 历史日线 · 自由选股${state.config.mode==='random'?' · 随机盲盒':''} · 未复权价格、固定模拟费率；不计分红送转，缺失行情不成交。日线无法还原实际盘口与排队。`
+            : `${state.config.data_source} 历史日线 · 使用未复权成交价和历史费率；日线简化模拟无法还原实际盘口与排队。`;
         $('metrics').innerHTML = metric('总资产 / 元',fmt(last.total_assets),`累计收益 ${signed(pnl)}`,tone(pnl)) + metric('可用现金 / 元',fmt(state.account.available_cash),'所有股票共享') + metric('冻结现金 / 元',fmt(state.account.frozen_cash),'待成交买单占用') + metric('持仓市值 / 元',fmt(last.market_value),`收盘估值 ${state.current_date}`) + metric('当日收益 / 元',signed(last.daily_pnl),`已实现 ${signed(state.account.realized_pnl)}`,tone(last.daily_pnl));
         $('stock-count').textContent = `${state.config.stocks.length} 只`;
         $('stocks').innerHTML = state.quotes.map(quote => {
@@ -463,6 +466,14 @@
         } finally {busy=false;controls();}
     }
     $('source').addEventListener('change',run(sourceChanged));
+    function modeChanged() {
+        const random = $('setup-mode').value === 'random';
+        $('random-options').hidden = !random; $('specified-options').hidden = random;
+        for (const id of ['random-count','random-days']) $(id).required = random;
+        invalidate();
+    }
+    $('setup-mode').addEventListener('change',modeChanged);
+    for (const id of ['random-count','random-days','random-sector']) $(id).addEventListener('input',invalidate);
     $('prepare-data').addEventListener('click',run(prepareData));
     for (const id of ['cash','start','end']) $(id).addEventListener('input',invalidate);
     $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(run(search),200);});
@@ -473,7 +484,13 @@
     }));
     $('selected').addEventListener('click',event=>{const b=event.target.closest('[data-remove]');if(b && !busy && !pending){selected.delete(b.dataset.remove);invalidate();renderSelected();}});
     $('check').addEventListener('click',run(checkData));
-    $('create-form').addEventListener('submit',run(async event=>{event.preventDefault();if(busy||pending||checked!==fingerprint())return;await transact('/api/portfolio/trainings',{request_id:crypto.randomUUID(),...createParams()});}));
+    async function createTraining() {
+        if(busy||pending||!$('create-form').reportValidity())return;
+        message('正在准备股票和行情，请稍候…');
+        const ok = await transact('/api/portfolio/trainings',{request_id:crypto.randomUUID(),...createParams()});
+        if (ok) {sessionStorage.removeItem('portfolio.setup');window.scrollTo(0,0);}
+    }
+    $('create-form').addEventListener('submit',run(async event=>{event.preventDefault();await createTraining();}));
     $('profile').addEventListener('change',run(selectProfile));
     $('refresh-list').addEventListener('click',run(listTrainings));
     $('training-list').addEventListener('click',run(async event=>{const b=event.target.closest('[data-restore]');if(b)await openTraining(b.dataset.restore);}));
@@ -496,7 +513,7 @@
     $('detail').addEventListener('click',run(async event=>{const b=event.target.closest('[data-cancel]');if(b){stopPlayback();await mutate('cancel',{order_id:b.dataset.cancel});}}));
     document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;renderDetails();}));
     $('chart-mode').addEventListener('change',run(drawStock));
-    $('exit').addEventListener('click',run(async()=>{if(busy||pending)return;stopPlayback();quoteSeq++;estimateSeq++;comparisonSeq++;state=null;report=null;$('workspace').hidden=true;$('lobby').hidden=false;await listTrainings();message('训练已自动保存，下次可继续。');}));
+    $('exit').addEventListener('click',run(async()=>{if(busy||pending)return;stopPlayback();quoteSeq++;estimateSeq++;comparisonSeq++;state=null;report=null;$('workspace').hidden=true;$('lobby').hidden=false;await listTrainings();message('训练已自动保存，下次可继续。');window.scrollTo(0,0);}));
     $('end-training').addEventListener('click',()=>{if(!busy&&!pending){stopPlayback();$('end-dialog').showModal();}});
     $('keep-training').addEventListener('click',()=>$('end-dialog').close());
     $('confirm-end').addEventListener('click',run(async()=>{$('end-dialog').close();await mutate('end');}));
@@ -505,7 +522,20 @@
         const data=await api('/api/users');
         const users=Array.isArray(data) ? data : (data.users || []);
         $('profile').innerHTML=users.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
-        const last=localStorage.getItem('currentUser');if(users.includes(last))$('profile').value=last;
+        const draft = new URLSearchParams(location.search).get('setup') === '1' ? JSON.parse(sessionStorage.getItem('portfolio.setup') || 'null') : null;
+        const last=draft?.user || localStorage.getItem('currentUser');if(users.includes(last))$('profile').value=last;
         await selectProfile();
+        if (draft && users.includes(draft.user) && !pending) {
+            if ([...$('source').options].some(option=>option.value===draft.data_source)) $('source').value=draft.data_source;
+            await sourceChanged();
+            $('setup-mode').value=draft.mode; $('cash').value=draft.initial_cash;
+            $('start').value=draft.start_date; $('end').value=draft.end_date;
+            $('random-count').value=draft.stock_count; $('random-days').value=draft.training_days;
+            $('random-sector').value=draft.sector;
+            selected = new Map(draft.stocks.map(code=>[code,names.get(code)||'']));
+            modeChanged(); renderSelected();
+            history.replaceState(null,'','portfolio.html');
+            await createTraining();
+        }
     })();
 })();

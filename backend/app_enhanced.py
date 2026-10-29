@@ -48,7 +48,7 @@ portfolio_repository = PortfolioRepository(runtime_paths.users / "portfolio.sqli
 register_portfolio_routes(app, portfolio_repository, user_manager,
     portfolio_replay_factory(runtime_paths.data,
         allow_demo=os.environ.get("KLINE_TRAINER_PORTFOLIO_DEMO") == "1",
-        stock_names=lambda: data_manager.stock_names))
+        stock_names=lambda: data_manager.stock_names, data_manager=data_manager))
 
 @app.route('/')
 def index():

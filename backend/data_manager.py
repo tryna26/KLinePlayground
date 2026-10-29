@@ -973,6 +973,56 @@ class DataManager:
             print(f"获取股票 {stock_code} 数据失败: {e}")
             return None
 
+    def get_stock_data_range(self, stock_code, start_date, end_date, source="tencent"):
+        """Bounded daily download for portfolios; never fetch from a default 2010.
+
+        Keep source/range caches separate from legacy full-history files. Partial
+        IPO histories remain partial; callers decide if the observations suffice.
+        Transport errors propagate so blind boxes can stop a source-wide outage.
+        """
+        start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
+        if end < start:
+            raise ValueError("结束日期不能早于开始日期")
+        if source not in {"tencent", "akshare", "xtdata", "mootdx", "offline"}:
+            raise ValueError("不支持的日线数据源")
+        stock_code = self._normalize_stock_code(stock_code)
+        if source == "offline":
+            return self.get_stock_data(stock_code, source="offline", interval="daily")
+        cache_dir = os.path.join(self.data_dir, "daily_ranges", source)
+        cache_path = os.path.join(cache_dir, f"{stock_code}_{start:%Y%m%d}_{end:%Y%m%d}.csv")
+        if os.path.isfile(cache_path):
+            cached = self._normalize_daily_kline(pd.read_csv(cache_path))
+            if cached is not None and not cached.empty:
+                return self._slice_date_range(cached, start, end)
+        if source == "tencent":
+            from backend.tencent_source import fetch_raw_rows
+            rows = fetch_raw_rows(stock_code, str(start.date()), str(end.date()))
+            frame = self._normalize_daily_kline(pd.DataFrame(rows, columns=["date", "open", "close", "high", "low", "volume"]))
+        else:
+            bundle = self._fetch_stock_bundle(stock_code, str(start.date()), source, end_date=str(end.date()))
+            frame = bundle.get("kline")
+        if frame is None or frame.empty:
+            return None
+        frame = self._slice_date_range(frame, start, end)
+        if frame.empty:
+            return None
+        os.makedirs(cache_dir, exist_ok=True)
+        saved = frame.copy()
+        saved["date"] = saved["date"].dt.strftime("%Y-%m-%d")
+        # Atomic publication: interrupted writes cannot become a valid range cache.
+        import tempfile
+        descriptor, temporary = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+                saved.to_csv(stream, index=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, cache_path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return frame
+
     def get_factor_data(
         self,
         stock_code: str,

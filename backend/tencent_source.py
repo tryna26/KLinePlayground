@@ -8,7 +8,12 @@ import pandas as pd
 import requests
 
 
-URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+URL = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get"
+FALLBACK_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+
+
+class TencentSourceUnavailable(RuntimeError):
+    """Both official endpoints failed at the HTTP/transport level."""
 
 
 def fetch_raw_rows(stock_code, start_date, end_date):
@@ -20,12 +25,12 @@ def fetch_raw_rows(stock_code, start_date, end_date):
     """
     if len(stock_code) != 6 or not stock_code.isascii() or not stock_code.isdigit():
         raise ValueError("股票代码必须是六位数字")
-    if stock_code.startswith(("600", "601", "603", "605")):
+    if stock_code.startswith(("60", "68", "69")):
         symbol = "sh" + stock_code
-    elif stock_code.startswith(("000", "001", "002", "003")):
+    elif stock_code.startswith(("00", "30")):
         symbol = "sz" + stock_code
     else:
-        raise ValueError("组合行情仅支持沪深主板 A 股")
+        raise ValueError("腾讯行情支持沪深 A 股，其他市场请选择其他数据源")
     start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
     if end < start:
         raise ValueError("结束日期不能早于开始日期")
@@ -41,12 +46,13 @@ def fetch_raw_rows(stock_code, start_date, end_date):
 
 def _request_rows(symbol, first, last, adjustment):
     error = None
-    for attempt in range(2):
+    transport_errors = 0
+    for attempt, endpoint in enumerate((URL, FALLBACK_URL)):
         try:
             with requests.Session() as session:
                 session.trust_env = False
                 response = session.get(
-                    URL, params={"param": f"{symbol},day,{first},{last},640,{adjustment}"},
+                    endpoint, params={"param": f"{symbol},day,{first},{last},640,{adjustment}"},
                     headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"},
                     timeout=(6, 15),
                 )
@@ -71,9 +77,12 @@ def _request_rows(symbol, first, last, adjustment):
             return [row[:6] for row in rows]
         except (requests.RequestException, ValueError, RuntimeError) as exc:
             error = exc
-            if attempt == 0:
+            if isinstance(exc, requests.RequestException):
+                transport_errors += 1
+            if attempt == 0 and not isinstance(exc, requests.HTTPError):
                 time.sleep(0.5)
-    raise RuntimeError(f"腾讯行情获取失败（{symbol}，{first} 至 {last}）：{error}") from error
+    error_type = TencentSourceUnavailable if transport_errors == 2 else RuntimeError
+    raise error_type(f"腾讯行情获取失败（{symbol}，{first} 至 {last}）：{error}") from error
 
 
 def fetch_bundle(stock_code, start_date, end_date=None):

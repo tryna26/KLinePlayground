@@ -87,6 +87,7 @@ class MarketRules:
     tick: Decimal = CENT
     limit: Decimal = Decimal("0.10")
     reserve_buffer: Decimal = Decimal("0.10")
+    practice: bool = False
 
     def __post_init__(self):
         for field in ("tick", "limit", "reserve_buffer"):
@@ -115,6 +116,12 @@ class MarketRules:
         if any(value != money(value) for value in (bar.open, bar.high, bar.low, bar.close)):
             return "行情价格不符合 0.01 元报价单位"
         stock_code(state.stock)
+        if self.practice:
+            # Free-selection practice uses observed bars, without claiming an
+            # independently reviewed ST/IPO/ex-right history. No missing-bar fills.
+            if bar.high == bar.low:
+                return "一字行情，日线练习保守拒绝成交"
+            return None
         # Registration-system IPOs have five unrestricted public sessions.
         # Older IPO first sessions have extra pricing rules, outside v1 scope.
         unrestricted = False

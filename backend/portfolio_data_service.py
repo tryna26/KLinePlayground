@@ -9,8 +9,18 @@ from backend.replay_data import QuoteRepository, TencentDailySource
 from backend.replay_models import ActionHistory, CorporateAction, Evidence, ReplayDataError, SecurityHistory
 
 
-def replay_factory(data_dir, *, allow_demo=False, stock_names=None):
+def replay_factory(data_dir, *, allow_demo=False, stock_names=None, data_manager=None):
+    def manager():
+        nonlocal data_manager
+        if data_manager is None:
+            from backend.data_manager import DataManager
+            data_manager = DataManager(str(data_dir))
+        return data_manager
+
     def build(params):
+        if params["data_source"] in {"tencent", "akshare", "xtdata", "mootdx", "offline"}:
+            from backend.portfolio_practice import build_practice
+            return build_practice(data_dir, manager(), params)
         if params["data_source"] == "synthetic-practice":
             if not allow_demo:
                 raise ReplayDataError("合成数据仅可在显式启用的开发验收模式使用")
@@ -58,14 +68,16 @@ def replay_factory(data_dir, *, allow_demo=False, stock_names=None):
     def options(query="", source="tencent"):
         from backend.replay_models import stock_code
         from backend.portfolio_rules import FeeSchedule
-        sources = [{"id": "sina", "name": "真实日线 · 新浪（已核验银行股）"},
-                   {"id": "tencent", "name": "腾讯原始日线 · 需历史完整性核验"}]
+        sources = [{"id": row["value"], "name": row["label"]}
+                   for row in manager().get_available_sources() if row["available"]]
+        # Legacy reviewed runs remain restorable, but new exercises use the
+        # same source choices as the single-stock setup.
         if allow_demo:
             sources.append({"id": "synthetic-demo", "name": "合成演示 · 非真实证券历史"})
             sources.append({"id": "synthetic-practice", "name": "合成练习 · 多月均线与自动播放"})
-        if source not in {item["id"] for item in sources}:
+        if source != "sina" and source not in {item["id"] for item in sources}:
             raise ReplayDataError("该数据源未启用；合成演示需以 --portfolio-demo 启动")
-        names = (stock_names() if stock_names else {}) or {}
+        names = (stock_names() if stock_names else manager().stock_names) or {}
         if not names:
             cached_names = Path(data_dir) / "stock_names.json"
             if cached_names.is_file():
@@ -106,6 +118,8 @@ def replay_factory(data_dir, *, allow_demo=False, stock_names=None):
             if source == "sina":
                 from backend.portfolio_real_data import BANKS
                 names = {**{code:value[0] for code,value in BANKS.items()}, **names}
+            else:
+                coverage, updated_at = {}, None
         candidates = dict(names)
         if len(query) == 6 and query.isdigit():
             candidates.setdefault(query, query)
@@ -115,7 +129,7 @@ def replay_factory(data_dir, *, allow_demo=False, stock_names=None):
                 continue
             try:
                 stock_code(code)
-                reason = "" if code in coverage else "尚无已核验历史区间"
+                reason = "" if code in coverage else ("开始时自动加载所选日期的行情" if source != "sina" else "尚无已核验历史区间")
             except ReplayDataError as exc:
                 reason = str(exc)
             rows.append({"stock": code, "name": str(name), "coverage": coverage.get(code), "reason": reason})
@@ -126,10 +140,20 @@ def replay_factory(data_dir, *, allow_demo=False, stock_names=None):
                      "end":min(row["end"] for row in coverage.values())} if coverage else None
         return {"sources": sources, "stocks": rows, "suggested_range":suggested, "updated_at":updated_at, "fee_range": {
             "start": str(periods[0].start), "end": str(periods[-1].end)},
-            "note": "范围仅表示核验证据覆盖，开始前还会检查日历、行情和公司行为。"}
+            "note": "可自由选择股票和日期，开始时自动加载日线；非交易日起止将对齐区间内交易日。"}
 
     def preview(params):
         from backend.portfolio_engine import PortfolioEngine
+        if params["data_source"] in {"tencent", "akshare", "xtdata", "mootdx", "offline"}:
+            rows = []
+            for code in params["stocks"]:
+                try:
+                    build({**params, "stocks": [code]})
+                    rows.append({"stock": code, "supported": True, "reason": "行情已就绪"})
+                except ReplayDataError as exc:
+                    rows.append({"stock": code, "supported": False, "reason": str(exc)})
+            return {"supported": bool(rows) and all(row["supported"] for row in rows), "stocks": rows,
+                    "start_date": params["start_date"], "end_date": params["end_date"], "data_source": params["data_source"]}
         rows = []
         for code in params["stocks"]:
             try:

@@ -14,7 +14,7 @@
   <header class="topbar">
     <a class="brand" href="/">K<span> / </span>LINE <small>PLAYGROUND</small></a>
     <span class="mode">多股票历史模拟</span>
-    <div class="profile"><label for="profile">本地用户</label><select id="profile" aria-label="本地用户"></select><a href="/">单股票训练 ↗</a></div>
+    <div class="profile"><label for="profile">本地用户</label><select id="profile" aria-label="本地用户"></select><a href="/" class="home-link">← 返回首页</a></div>
   </header>
   <main>
     <div id="message" role="status" aria-live="polite" hidden></div>
@@ -22,24 +22,27 @@
     <section id="lobby">
       <div class="intro"><div><p class="eyebrow">PORTFOLIO PRACTICE</p><h1>一份账户，多种选择。</h1><p>在同一个历史日期练习选股、仓位分配与调仓。</p></div><div class="intro-rule">收盘后决策 <span>→</span> 下一交易日开盘尝试成交</div></div>
       <div class="setup-grid">
-        <section class="card setup"><div class="section-head"><h2>新建组合训练</h2><span class="pill">沪深主板 · 日线</span></div>
+        <section class="card setup"><div class="section-head"><h2>新建组合训练</h2><span class="pill">自由选股 · 日线</span></div>
           <form id="create-form">
+            <label>训练模式<select id="setup-mode"><option value="specified">指定股票</option><option value="random">随机盲盒</option></select></label>
             <div class="form-row"><label>数据源<select id="source"></select></label><label>初始资金 / 元<input id="cash" type="number" min="0.01" max="1000000000000" step="0.01" value="100000" required></label></div>
             <div id="source-note" class="notice"></div>
-            <div id="real-data-actions"><button id="prepare-data" type="button">接入 / 更新真实数据</button><p id="real-data-status" class="muted" aria-live="polite"></p></div>
+            <div id="real-data-actions" hidden><button id="prepare-data" type="button">接入 / 更新真实数据</button><p id="real-data-status" class="muted" aria-live="polite"></p></div>
             <div class="form-row"><label>开始日期<input id="start" type="date" required value="2024-01-02"></label><label>结束日期<input id="end" type="date" required value="2024-01-10"></label></div>
-            <label for="search">搜索股票名称或六位代码</label><input id="search" type="search" placeholder="例如 600000 或 浦发" autocomplete="off">
+            <div id="random-options" hidden><div class="form-row"><label>股票数量<input id="random-count" type="number" min="1" max="20" value="3" required></label><label>训练时长 / 交易日<input id="random-days" type="number" min="2" max="1000" value="60" required></label></div><label>板块筛选<select id="random-sector"><option value="all">全部</option><option value="main">主板</option><option value="gem">创业板</option><option value="sme">中小板</option></select></label><p class="muted">从日期范围内随机抽取股票和起点，所有股票共享同一训练区间。</p></div>
+            <div id="specified-options"><label for="search">搜索股票名称或六位代码</label><input id="search" type="search" placeholder="例如 600519、300750 或 贵州茅台" autocomplete="off">
             <div id="search-results" class="search-results" aria-label="股票搜索结果"></div>
             <div class="selected-head">已选股票 <span id="selected-count">0 / 20</span></div><div id="selected" class="chips"></div>
-            <div id="preview" class="preview" aria-live="polite">请选择股票，检查所选区间后开始。</div>
-            <div class="actions"><button id="check" type="button">检查数据范围</button><button id="create" class="primary" type="submit" disabled>开始组合训练</button></div>
+            </div>
+            <div id="preview" class="preview" aria-live="polite">选择股票和日期后直接开始，系统会自动加载行情。</div>
+            <div class="actions"><button id="check" type="button">预览可用行情（可选）</button><button id="create" class="primary" type="submit">开始组合训练</button></div>
           </form>
         </section>
-        <aside class="card"><div class="section-head"><h2>继续训练 / 查看报告</h2><button id="refresh-list" class="text-button">刷新</button></div><div id="training-list" class="training-list"></div><div class="rules"><h3>练习规则</h3><p>所有股票共享现金。切换股票保持日期；点击“下一交易日”才会推进整个组合。</p><p>买入按 100 股整数倍。当天买入的股票不能当天卖出，可提前提交下一交易日的卖单；冻结资金、股数不能重复使用。</p><p>按历史费率计费；买入默认预留价格缓冲。停牌、行情缺失和一字涨跌停按保守规则处理。成交使用未复权价格，日线无法还原盘口和排队。</p></div></aside>
+        <aside class="card"><div class="section-head"><h2>继续训练 / 查看报告</h2><button id="refresh-list" class="text-button">刷新</button></div><div id="training-list" class="training-list"></div><div class="rules"><h3>练习规则</h3><p>所有股票共享现金。切换股票保持日期；点击“下一交易日”才会推进整个组合。</p><p>买入按 100 股整数倍。当天买入的股票不能当天卖出，可提前提交下一交易日的卖单；冻结资金、股数不能重复使用。</p><p>自由选股采用固定模拟费率：佣金万三、最低 5 元，卖出印花税万五，过户费十万分之一。买入预留价格缓冲。缺失行情和一字行情不成交；不计分红送转。成交使用未复权价格，日线无法还原盘口和排队。</p></div></aside>
       </div>
     </section>
     <section id="workspace" hidden>
-      <div class="session-head"><div><p class="eyebrow">共同时间 · 收盘后决策</p><h1 id="date"></h1><p id="session-note"></p></div><div class="actions"><button id="exit">返回训练列表</button><button id="end-training">结束训练</button></div></div>
+      <div class="session-head"><div><p class="eyebrow">共同时间 · 收盘后决策</p><h1 id="date"></h1><p id="session-note"></p></div><div class="actions"><button id="exit" type="button">← 返回训练列表</button><button id="end-training" type="button" class="danger">结束训练</button><a class="home-link" href="/">返回首页</a></div></div>
       <div id="simulation-note" class="notice"></div>
       <div id="metrics" class="metrics"></div>
       <div class="trading-grid">

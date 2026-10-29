@@ -17,7 +17,8 @@ from backend.replay_calendar import ReplayCalendar
 
 class PortfolioReplay:
     def __init__(self, stocks, start, end, calendar, quotes, securities, actions, *, synthetic=False,
-                 accounting=False):
+                 accounting=False, practice=False):
+        self.__practice = practice
         self.__stocks = tuple(stock_code(code) for code in stocks)
         if not self.__stocks or len(set(self.__stocks)) != len(self.__stocks):
             raise ReplayDataError("股票池不能为空或包含重复代码")
@@ -74,6 +75,8 @@ class PortfolioReplay:
     def __require_date(self, value):
         for code in self.__stocks:
             state = self.__states[(code, value)]
+            if self.__practice and state.status in {DataStatus.UNKNOWN, DataStatus.NO_TRADES}:
+                continue  # Missing observations stay non-executable; the common clock can continue.
             if state.status not in {DataStatus.TRADING, DataStatus.SUSPENDED, DataStatus.NOT_LISTED,
                                     DataStatus.DELISTED, DataStatus.NO_TRADES}:
                 raise ReplayDataError(f"{code}：{state.reason}")
@@ -128,6 +131,7 @@ class PortfolioReplay:
         """Backend persistence only. Contains future data; never an HTTP result."""
         return serialize({"schema_version": 1, "stocks": self.__stocks,
             "start": self.__dates[0], "end": self.__dates[-1], "synthetic": self.__synthetic,
+            "practice": self.__practice,
             "calendar": self.__calendar,
             "securities": dict(self.__securities), "actions": dict(self.__actions),
             "states": [serialize(state) for state in self.__states.values()]})
@@ -165,7 +169,8 @@ class PortfolioReplay:
                     return states[(code, value)]
 
             result = cls(payload["stocks"], payload["start"], payload["end"], calendar,
-                         PinnedQuotes(), securities, actions, synthetic=payload["synthetic"], accounting=True)
+                         PinnedQuotes(), securities, actions, synthetic=payload["synthetic"], accounting=True,
+                         practice=payload.get("practice", False))
             if len(states) != len(result.__stocks) * len(result.__dates):
                 raise ValueError("unexpected observations")
             return result

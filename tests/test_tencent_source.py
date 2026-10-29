@@ -1,7 +1,10 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from backend.tencent_source import _request_rows, fetch_raw_rows
+import requests
+
+from backend.tencent_source import (FALLBACK_URL, URL, TencentSourceUnavailable,
+                                    _request_rows, fetch_raw_rows)
 
 
 class TencentRawTests(unittest.TestCase):
@@ -47,6 +50,30 @@ class TencentRawTests(unittest.TestCase):
             ("sz000001", "2022-01-01", "2023-12-31", ""),
             ("sz000001", "2024-01-01", "2024-01-10", ""),
         ])
+
+    def test_http_501_switches_official_endpoint_without_repeating_blocked_host(self):
+        rows = [["2024-01-02", "10", "10", "11", "9", "123"]]
+        manager, session = self.payload({"code": 0, "data": {"sh600918": {"day": rows}}})
+        blocked, working = Mock(), session.get.return_value
+        blocked.raise_for_status.side_effect = requests.HTTPError("501 WAF")
+        session.get.side_effect = [blocked, working]
+        with manager, patch("backend.tencent_source.time.sleep") as sleep:
+            self.assertEqual(fetch_raw_rows("600918", "2024-01-02", "2024-01-10"), rows)
+        self.assertEqual([call.args[0] for call in session.get.call_args_list], [URL, FALLBACK_URL])
+        sleep.assert_not_called()
+
+    def test_both_http_failures_are_reported_as_source_outage(self):
+        manager, session = self.payload({})
+        session.get.return_value.raise_for_status.side_effect = requests.HTTPError("501 WAF")
+        with manager, self.assertRaises(TencentSourceUnavailable):
+            fetch_raw_rows("600918", "2024-01-02", "2024-01-10")
+        self.assertEqual(session.get.call_count, 2)
+
+    def test_growth_and_star_stocks_use_correct_market(self):
+        for code, symbol in [("300508", "sz300508"), ("688351", "sh688351")]:
+            with self.subTest(code=code), patch("backend.tencent_source._request_rows", return_value=[]) as request:
+                self.assertEqual(fetch_raw_rows(code, "2024-01-02", "2024-01-10"), [])
+                request.assert_called_once_with(symbol, "2024-01-02", "2024-01-10", "")
 
 
 if __name__ == "__main__":

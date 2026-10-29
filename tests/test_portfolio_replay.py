@@ -281,7 +281,9 @@ class ReplayTests(unittest.TestCase):
             self.session()
 
     def test_stock_scope_and_pool_validation(self):
-        for code in ["300001", "688001", "830001", "510050", "../000001", 1, "00001", "600１２３"]:
+        for code in ["300001", "688001", "830001", "920001", "600519", "301569"]:
+            self.assertEqual(stock_code(code), code)
+        for code in ["510050", "../000001", 1, "00001", "600１２３"]:
             with self.subTest(code=code), self.assertRaises(ReplayDataError):
                 stock_code(code)
         for pool in [[], ["600000", "600000"]]:

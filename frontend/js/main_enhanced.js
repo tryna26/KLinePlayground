@@ -660,6 +660,7 @@ function setupEventListeners() {
 
     // 训练设置相关
     document.getElementById('new-training-btn').addEventListener('click', showTrainingSetup);
+    document.getElementById('training-kind').addEventListener('change', updateTrainingKind);
     document.getElementById('cancel-setup-btn').addEventListener('click', hideTrainingSetup);
     document.getElementById('start-training-btn').addEventListener('click', startTraining);
 
@@ -1149,6 +1150,9 @@ async function showTrainingSetup(returnScreen = null) {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     document.getElementById('start-date').value = oneYearAgo.toISOString().split('T')[0];
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    document.getElementById('portfolio-end-date').value = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+    updateTrainingKind();
 }
 
 function hideTrainingSetup() {
@@ -1575,6 +1579,19 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.id === `${tabName}-tab`);
     });
+    updateTrainingKind();
+}
+
+function updateTrainingKind() {
+    const portfolio = document.getElementById('training-kind').value === 'portfolio';
+    const random = document.querySelector('.setup-tabs .tab-btn.active')?.dataset.tab === 'random';
+    document.getElementById('stock-code-label').textContent = portfolio ? '股票代码（逗号或空格分隔，最多 20 只）' : '股票代码';
+    document.getElementById('stock-code').placeholder = portfolio ? '例如：600519, 300750, 000001' : '例如：000001';
+    document.getElementById('portfolio-dates').classList.toggle('hidden', !portfolio);
+    document.getElementById('portfolio-random-options').classList.toggle('hidden', !portfolio || !random);
+    document.getElementById('portfolio-setup-note').classList.toggle('hidden', !portfolio);
+    document.getElementById('portfolio-records').classList.toggle('hidden', !portfolio);
+    document.getElementById('start-training-btn').textContent = portfolio ? '开始组合训练' : '开始训练';
 }
 
 function replaceRenderedKlineData(klineData) {
@@ -1696,6 +1713,30 @@ async function startTraining() {
     const initialCapital = parseFloat(document.getElementById('initial-capital').value);
     const dataSource = document.getElementById('data-source').value || 'tencent';
     const period = 'daily';
+
+    if (document.getElementById('training-kind').value === 'portfolio') {
+        const stocks = document.getElementById('stock-code').value.trim().split(/[,，;；\s]+/).filter(Boolean);
+        const start = document.getElementById(isRandomMode ? 'random-start-date' : 'start-date').value.trim();
+        const end = document.getElementById(isRandomMode ? 'random-end-date' : 'portfolio-end-date').value.trim();
+        const count = Number(document.getElementById('portfolio-stock-count').value);
+        const days = Number(document.getElementById('portfolio-training-days').value);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start >= end) {
+            alert('请填写有效的起止日期，结束日期须晚于开始日期'); return;
+        }
+        if (!Number.isFinite(initialCapital) || initialCapital <= 0) {alert('请填写有效的初始资金');return;}
+        if (!isRandomMode && (!stocks.length || stocks.length > 20 || stocks.some(code => !/^\d{6}$/.test(code)) || new Set(stocks).size !== stocks.length)) {
+            alert('请输入 1 至 20 个不重复的六位股票代码'); return;
+        }
+        if (isRandomMode && (!Number.isInteger(count) || count < 1 || count > 20 || !Number.isInteger(days) || days < 2 || days > 1000)) {
+            alert('股票数量须为 1 至 20，训练时长须为 2 至 1000 个交易日'); return;
+        }
+        sessionStorage.setItem('portfolio.setup', JSON.stringify({user:currentUser, stocks,
+            mode:isRandomMode?'random':'specified', start_date:start, end_date:end,
+            data_source:dataSource, initial_cash:String(initialCapital), stock_count:count,
+            training_days:days, sector:document.getElementById('sector-filter').value}));
+        window.location.href = 'portfolio.html?setup=1';
+        return;
+    }
 
     let trainingConfig = {
         user: currentUser,

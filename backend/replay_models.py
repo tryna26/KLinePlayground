@@ -26,8 +26,8 @@ def day(value) -> date:
 
 
 def stock_code(value) -> str:
-    if not isinstance(value, str) or not re.fullmatch(r"(?:600|601|603|605|000|001|002|003)[0-9]{3}", value):
-        raise ReplayDataError("组合训练仅支持六位代码的沪深主板 A 股")
+    if not isinstance(value, str) or not re.fullmatch(r"(?:60[0135]|68[89]|00[0123]|30[01]|43[0-9]|8[237][0-9]|92[0-9])[0-9]{3}", value):
+        raise ReplayDataError("请输入六位 A 股股票代码")
     return value
 
 
@@ -138,7 +138,7 @@ class Evidence:
         timestamp(self.checked_at)
         if self.end < self.start or not all((self.source, self.version, self.reference)):
             raise ReplayDataError("覆盖证明缺少来源、版本、核验依据或有效日期范围")
-        if self.scope not in {"reviewed", "synthetic"}:
+        if self.scope not in {"reviewed", "synthetic", "practice"}:
             raise ReplayDataError("覆盖证明类型无效")
 
     def covers(self, start, end, *, synthetic=False):

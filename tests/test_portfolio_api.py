@@ -170,8 +170,10 @@ class PortfolioAPITests(unittest.TestCase):
         response = self.client.post('/api/portfolio/preview', json=params)
         self.assertFalse(response.json['supported'])
         params['data_source'] = 'tencent'
-        response = self.client.post('/api/portfolio/preview', json=params)
-        self.assertIn('完整性证明', response.json['stocks'][0]['reason'])
+        with patch('backend.portfolio_practice.load_rows', side_effect=ReplayDataError('该数据源暂无行情')):
+            response = self.client.post('/api/portfolio/preview', json=params)
+        self.assertFalse(response.json['supported'])
+        self.assertIn('暂无行情', response.json['stocks'][0]['reason'])
 
     def test_ui_preview_cannot_upload_evidence_or_use_invalid_cash(self):
         params = {k:v for k,v in self.create_body.items() if k != 'request_id'}
@@ -299,10 +301,11 @@ class PortfolioAPITests(unittest.TestCase):
             self.assertEqual(response.status_code, 400, (override, response.json))
         self.assertEqual(self.client.post("/api/portfolio/trainings", data="{", content_type="application/json").status_code, 400)
 
-    def test_real_unreviewed_and_demo_disabled_fail_closed(self):
-        response = self.client.post("/api/portfolio/trainings", json={**self.create_body, "data_source": "tencent"})
+    def test_missing_quotes_and_demo_disabled_fail_closed(self):
+        with patch('backend.portfolio_practice.load_rows', side_effect=ReplayDataError('该数据源暂无行情')):
+            response = self.client.post("/api/portfolio/trainings", json={**self.create_body, "data_source": "tencent"})
         self.assertEqual(response.status_code, 400)
-        self.assertIn("完整性", response.json["error"])
+        self.assertIn("暂无行情", response.json["error"])
         client = self.make_app(self.repo, replay_factory(self.root / "data")).test_client()
         self.select(client, "alice")
         self.assertEqual(client.post("/api/portfolio/trainings", json=self.create_body).status_code, 400)

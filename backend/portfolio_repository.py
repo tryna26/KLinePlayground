@@ -184,12 +184,26 @@ class PortfolioRepository(PortfolioLedgerStore):
         if previous is not None:
             return previous
         replay = replay_factory(params)
-        if replay.current_date.isoformat() != params["start_date"] or replay._engine_end_date().isoformat() != params["end_date"] or list(replay.stocks) != params["stocks"]:
+        practice = replay._engine_export().get("practice", False)
+        random_mode = params.get("mode") == "random"
+        if practice:
+            matches = (params["start_date"] <= str(replay.current_date) < str(replay._engine_end_date()) <= params["end_date"]
+                       and (len(replay.stocks) == params["stock_count"] if random_mode else list(replay.stocks) == params["stocks"]))
+        else:
+            matches = (str(replay.current_date) == params["start_date"] and str(replay._engine_end_date()) == params["end_date"] and list(replay.stocks) == params["stocks"])
+        if not matches:
             raise ReplayDataError("后端数据集与请求的股票池或日期不一致")
         fees, rules = FeeSchedule(), MarketRules()
+        if practice:
+            # Like single-stock practice, a fixed simulation fee assumption
+            # allows arbitrary historical dates without asserting tax accuracy.
+            fees = FeeSchedule([FeePeriod("1990-01-01", "2099-12-31", "practice-fixed-v1", "0.0005", "0.00001")])
+            rules = MarketRules(version="free-selection-daily-v1", practice=True, reserve_buffer="0.30")
         pinned = replay._engine_export()
         config = serialize({"schema_version": 1, "stocks": replay.stocks,
-            "start_date": params["start_date"], "end_date": params["end_date"],
+            "start_date": str(replay.current_date), "end_date": str(replay._engine_end_date()),
+            "requested_start": params["start_date"], "requested_end": params["end_date"],
+            "mode": params.get("mode", "specified"), "practice": practice,
             "initial_cash": params["initial_cash"], "data_source": params["data_source"],
             "synthetic": pinned["synthetic"], "fee_periods": fees.periods, "market_rules": rules})
         with self.transaction():
