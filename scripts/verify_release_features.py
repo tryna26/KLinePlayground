@@ -99,6 +99,8 @@ def main():
 
     try:
         start()
+        welcome = session.get(base + '/', timeout=10).text
+        assert f'v{VERSION}' in welcome and 'A股组合复盘训练' in welcome
         html = session.get(base + '/portfolio.html', timeout=10).text
         js = session.get(base + '/js/portfolio.js', timeout=10).text
         for marker in ('id="reset-training"', 'id="reset-dialog"', 'id="order-position"', 'id="pending-orders"'):
