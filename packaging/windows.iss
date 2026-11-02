@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "4.0.0-rc.1"
+  #define AppVersion "4.0.0-rc.2"
 #endif
 #define SourceRoot AddBackslash(SourcePath) + ".."
 [Setup]

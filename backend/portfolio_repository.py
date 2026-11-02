@@ -229,7 +229,7 @@ class PortfolioRepository(PortfolioLedgerStore):
             engine, config, created = self._load(owner, training_id)
             if engine.snapshot()["version"] != params["expected_version"]:
                 raise conflict("账户版本已过期，请刷新后使用新的请求标识重试")
-            if engine.snapshot()["status"] == "ended":
+            if engine.snapshot()["status"] == "ended" and action != "reset":
                 raise conflict("组合训练已结束，不能继续交易或推进")
             if action == "submit":
                 engine.submit(params["stock"], params["side"], params["quantity"], request_id=request_id, budget=params.get("budget"))
@@ -241,6 +241,8 @@ class PortfolioRepository(PortfolioLedgerStore):
                 engine.advance(operation_id=request_id, expected_date=params["expected_date"])
             elif action == "end":
                 engine.end()
+            elif action == "reset":
+                engine.reset()
             else:
                 raise ReplayDataError("未知组合操作")
             result = self._view(engine, config, created)

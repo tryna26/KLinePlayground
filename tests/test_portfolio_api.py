@@ -266,7 +266,8 @@ class PortfolioAPITests(unittest.TestCase):
         for path, body in (("restore", {}), ("advance", {"request_id": "buy-1", "expected_version": 0, "expected_date": state["current_date"]}),
                            ("orders", {"request_id": "buy-1", "expected_version": 0, "stock": "600000", "side": "buy", "quantity": 200}),
                            ("cancel", {"request_id": "cancel", "expected_version": 1, "order_id": state["orders"][0]["order_id"]}),
-                           ("end", {"request_id": "end", "expected_version": 1})):
+                           ("end", {"request_id": "end", "expected_version": 1}),
+                           ("reset", {"request_id": "reset", "expected_version": state["version"]})):
             self.assertEqual(bob.post(self.prefix + "/" + path, json=body).status_code, 404)
         self.assertEqual(self.get(), state)
 
@@ -389,6 +390,82 @@ class PortfolioAPITests(unittest.TestCase):
         for budget in ("1e99999", "NaN", "0", "10.001"):
             self.buy(state, key="invalid-budget", budget=budget, expected=400)
             self.assertEqual(self.get(), state)
+
+    def test_reset_restores_setup_and_clears_run_with_pinned_data(self):
+        state = self.advance(self.buy(self.create(initial_cash="200000")))
+        state = self.mutate("orders", state, "sell-before-reset", stock="600000", side="sell", quantity=100)
+        state = self.mutate("orders", state, "buy-before-reset", stock="600036", side="buy", quantity=100)
+        pinned_before = self.repo._connection.execute("SELECT replay,replay_hash FROM portfolio_training WHERE training_id=?", (self.tid,)).fetchone()
+        reset = self.mutate("reset", state, "reset-1")
+        self.assertEqual(reset["training_id"], state["training_id"])
+        self.assertEqual(reset["config"], state["config"])
+        self.assertEqual(reset["created_at"], state["created_at"])
+        self.assertEqual(reset["current_date"], "2024-01-02")
+        self.assertEqual(reset["next_date"], "2024-01-03")
+        self.assertEqual(reset["version"], state["version"] + 1)
+        self.assertEqual(reset["account"], {"cash":"200000.00", "initial_cash":"200000.00", "realized_pnl":"0.00", "frozen_cash":"0.00", "available_cash":"200000.00"})
+        for key in ("orders", "fills", "lots", "applied_actions"):
+            self.assertEqual(reset[key], [])
+        self.assertEqual(reset["requests"], {})
+        self.assertTrue(all(row["quantity"] == row["frozen_shares"] == 0 for row in reset["positions"]))
+        self.assertEqual(len(reset["daily_assets"]), 1)
+        self.assertEqual([row["kind"] for row in reset["ledger"]], ["opening"])
+        self.assertEqual(self.get(), reset)
+        self.assertEqual(self.repo._connection.execute("SELECT replay,replay_hash FROM portfolio_training WHERE training_id=?", (self.tid,)).fetchone(), pinned_before)
+        self.assertEqual(len(self.client.get("/api/portfolio/trainings").json["trainings"]), 1)
+        self.assertEqual(self.client.get(self.prefix + "/history/600000?through=2024-01-03").status_code, 400)
+        self.buy(state, key="stale-after-reset", expected=409)
+        fresh = self.buy(reset, key="new-run-buy")
+        self.assertEqual(self.mutate("reset", state, "reset-1"), reset)
+        self.assertEqual(self.get(), fresh)
+        advanced = self.advance(fresh, key="new-run-next")
+        self.assertEqual(len(advanced["fills"]), 1)
+        self.assertEqual(advanced["fills"][0]["quantity"], 200)
+
+    def test_reset_ended_training_hides_old_report_and_persists(self):
+        ended = self.mutate("end", self.advance(self.buy(self.create())), "end-before-reset")
+        reset = self.mutate("reset", ended, "reset-ended")
+        self.assertEqual(reset["status"], "active")
+        self.assertIsNone(reset["ended_at"])
+        self.assertNotIn("report", reset)
+        self.assertEqual(self.client.get(self.prefix + "/report").status_code, 409)
+        self.repo.close()
+        self.repo = PortfolioRepository(self.path)
+        self.app = self.make_app(self.repo)
+        self.client = self.app.test_client()
+        self.select(self.client, "alice")
+        self.assertEqual(self.get(), reset)
+
+    def test_reset_failure_rolls_back_and_same_request_can_retry(self):
+        state = self.advance(self.buy(self.create()))
+        with patch.object(self.repo, "_before_transaction_commit", side_effect=sqlite3.OperationalError("disk full")):
+            self.mutate("reset", state, "reset-failed", expected=503)
+        self.assertEqual(self.get(), state)
+        self.assertEqual(self.repo._connection.execute("SELECT COUNT(*) FROM portfolio_request WHERE request_id='reset-failed'").fetchone()[0], 0)
+        reset = self.mutate("reset", state, "reset-failed")
+        self.assertEqual(reset["current_date"], "2024-01-02")
+        self.assertEqual(reset["orders"], [])
+
+    def test_reset_races_with_advance_using_the_same_version(self):
+        state = self.buy(self.create())
+        owner = self.repo._connection.execute("SELECT owner FROM portfolio_training").fetchone()[0]
+        second = PortfolioRepository(self.path)
+        self.addCleanup(second.close)
+        def attempt(pair):
+            repository, action = pair
+            params = {"request_id": action, "expected_version": state["version"]}
+            if action == "advance":
+                params["expected_date"] = state["current_date"]
+            try:
+                return repository.mutate(owner, self.tid, action, params)
+            except PortfolioAPIError as exc:
+                return exc.status
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, [(self.repo,"reset"), (second,"advance")]))
+        successes = [result for result in results if isinstance(result, dict)]
+        self.assertEqual(len(successes), 1)
+        self.assertIn(409, results)
+        self.assertEqual(self.get(), successes[0])
 
     def test_v1_metadata_migration_preserves_training_and_adds_sessions(self):
         state = self.buy(self.create())

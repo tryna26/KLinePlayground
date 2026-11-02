@@ -226,5 +226,10 @@ def register_portfolio_routes(app, repository, users, replay_factory):
     def end(owner, training_id):
         return mutation(owner, training_id, "end")
 
+    @api.post("/trainings/<training_id>/reset")
+    @authenticated
+    def reset(owner, training_id):
+        return mutation(owner, training_id, "reset")
+
     app.register_blueprint(api)
     app.extensions["portfolio_repository"] = repository

@@ -26,7 +26,6 @@
           <form id="create-form">
             <label>训练模式<select id="setup-mode"><option value="specified">指定股票</option><option value="random">随机盲盒</option></select></label>
             <div class="form-row"><label>数据源<select id="source"></select></label><label>初始资金 / 元<input id="cash" type="number" min="0.01" max="1000000000000" step="0.01" value="100000" required></label></div>
-            <div id="source-note" class="notice"></div>
             <div id="real-data-actions" hidden><button id="prepare-data" type="button">接入 / 更新真实数据</button><p id="real-data-status" class="muted" aria-live="polite"></p></div>
             <div class="form-row"><label>开始日期<input id="start" type="date" required value="2024-01-02"></label><label>结束日期<input id="end" type="date" required value="2024-01-10"></label></div>
             <div id="random-options" hidden><div class="form-row"><label>股票数量<input id="random-count" type="number" min="1" max="20" value="3" required></label><label>训练时长 / 交易日<input id="random-days" type="number" min="2" max="1000" value="60" required></label></div><label>板块筛选<select id="random-sector"><option value="all">全部</option><option value="main">主板</option><option value="gem">创业板</option><option value="sme">中小板</option></select></label><p class="muted">从日期范围内随机抽取股票和起点，所有股票共享同一训练区间。</p></div>
@@ -38,12 +37,20 @@
             <div class="actions"><button id="check" type="button">预览可用行情（可选）</button><button id="create" class="primary" type="submit">开始组合训练</button></div>
           </form>
         </section>
-        <aside class="card"><div class="section-head"><h2>继续训练 / 查看报告</h2><button id="refresh-list" class="text-button">刷新</button></div><div id="training-list" class="training-list"></div><div class="rules"><h3>练习规则</h3><p>所有股票共享现金。切换股票保持日期；点击“下一交易日”才会推进整个组合。</p><p>买入按 100 股整数倍。当天买入的股票不能当天卖出，可提前提交下一交易日的卖单；冻结资金、股数不能重复使用。</p><p>自由选股采用固定模拟费率：佣金万三、最低 5 元，卖出印花税万五，过户费十万分之一。买入预留价格缓冲。缺失行情和一字行情不成交；不计分红送转。成交使用未复权价格，日线无法还原盘口和排队。</p></div></aside>
+        <aside class="lobby-sidebar"><section class="card"><div class="section-head"><div><h2>我的组合训练</h2><p>继续上次进度，或回看已完成的总结。</p></div><button id="refresh-list" type="button">刷新列表</button></div><div id="training-list" class="training-list"></div></section></aside>
       </div>
     </section>
     <section id="workspace" hidden>
-      <div class="session-head"><div><p class="eyebrow">共同时间 · 收盘后决策</p><h1 id="date"></h1><p id="session-note"></p></div><div class="actions"><button id="exit" type="button">← 返回训练列表</button><button id="end-training" type="button" class="danger">结束训练</button><a class="home-link" href="/">返回首页</a></div></div>
-      <div id="simulation-note" class="notice"></div>
+      <div class="session-head"><div><p id="session-eyebrow" class="eyebrow">共同时间 · 收盘后决策</p><h1 id="date"></h1><p id="session-note"></p></div><div class="actions"><button id="exit" type="button">← 返回训练列表</button><button id="reset-training" type="button">重置训练</button><button id="end-training" type="button" class="danger">结束并总结</button></div></div>
+      <section id="report" class="card report" tabindex="-1" aria-labelledby="report-title" hidden>
+        <div class="section-head report-heading"><div><p class="eyebrow">PORTFOLIO REVIEW</p><h2 id="report-title">本次组合训练总结</h2><p id="report-period"></p></div><span class="pill">已保存 · 可随时回看</span></div>
+        <div class="report-result"><div><span>组合总收益率</span><strong id="report-return"></strong><p id="report-verdict"></p></div><div class="report-capital"><span>初始资金 → 最终资产</span><strong id="report-capital"></strong><p id="report-pnl"></p></div></div>
+        <div id="report-summary" class="metrics"></div>
+        <div class="report-analysis"><section><h3>账户资产走势</h3><p class="muted">按每日收盘估值 · 单位：元</p><div id="report-equity" aria-label="本次训练每日总资产曲线"></div></section><section class="review-notes"><h3>这次练习值得回看的地方</h3><ul id="report-insights"></ul></section></div>
+        <div class="section-head"><h3>各股盈亏贡献</h3><span class="muted">含已计入的交易费用</span></div><div id="report-stocks" class="table-scroll"></div>
+        <div class="report-actions"><button id="report-review" type="button" aria-expanded="false" aria-controls="review-workspace">查看 K 线与交易明细</button><button id="report-new" type="button" class="primary">再开一局 →</button></div>
+      </section>
+      <div id="review-workspace">
       <div id="metrics" class="metrics"></div>
       <div class="trading-grid">
         <aside class="card stock-panel"><div class="section-head"><h2>股票池</h2><span id="stock-count"></span></div><div id="stocks"></div></aside>
@@ -54,30 +61,43 @@
           <div class="ma-controls" aria-label="均线设置"><span>均线</span><label><input type="checkbox" data-ma="5" checked>MA5</label><label><input type="checkbox" data-ma="10" checked>MA10</label><label><input type="checkbox" data-ma="20" checked>MA20</label><label><input type="checkbox" data-ma="30">MA30</label><label><input type="checkbox" data-ma="60">MA60</label></div>
           <div id="hover-info" class="hover-info" aria-live="off">鼠标移到 K 线上查看当日详情。</div>
           <div id="ma-values" class="ma-values"></div>
-          <div id="price-chart" aria-label="当前股票的K线图"></div><div id="chart-empty" hidden>截至当前日期无可用日线。</div><div id="volume-chart" aria-label="成交量"></div><div id="chart-foot" class="chart-foot"></div>
+          <div id="price-chart" aria-label="当前股票的K线图"></div><div id="chart-empty" hidden>截至当前日期无可用日线。</div><div id="volume-chart" aria-label="成交量"></div>
           </div>
-          <div id="comparison-view" class="comparison-panel chart-view" role="tabpanel" aria-labelledby="chart-tab-comparison" hidden><div class="section-head"><h2>多股走势对比与组合收益</h2><span class="pill">截至公共日期 · 涨跌幅 %</span></div><div id="comparison-legend" class="comparison-legend"></div><div id="comparison-info" class="comparison-info">鼠标移到曲线上查看各股收益。</div><div id="comparison-chart" aria-label="所有股票和组合账户的收益对比曲线"></div><p class="muted">个股以本次训练首个有效收盘价为 0%；组合账户以初始资金为 0%。停牌沿用最近有效收盘价，尚未上市期间留空；这是未复权价格变化对比。</p></div>
-          <p class="chart-attribution">图表由 TradingView Lightweight Charts 提供；左下角 TV 为图表库来源标识。</p>
+          <div id="comparison-view" class="comparison-panel chart-view" role="tabpanel" aria-labelledby="chart-tab-comparison" hidden><div class="section-head"><h2>多股走势对比与组合收益</h2><span class="pill">截至公共日期 · 涨跌幅 %</span></div><div id="comparison-legend" class="comparison-legend"></div><div id="comparison-info" class="comparison-info">鼠标移到曲线上查看各股收益。</div><div id="comparison-chart" aria-label="所有股票和组合账户的收益对比曲线"></div><p class="muted">个股：首个收盘价 = 0% · 组合：初始资金 = 0%</p></div>
         </section>
         <aside class="card order-panel">
           <section class="playback-panel"><h2>训练控制</h2><div class="playback-actions"><button id="play" type="button">▶ 自动播放</button><button id="advance" type="button" class="primary">下一交易日 →</button></div><label class="speed-label">播放速度<select id="play-speed"><option value="500">0.5 秒 / 日</option><option value="1000" selected>1 秒 / 日</option><option value="2000">2 秒 / 日</option><option value="5000">5 秒 / 日</option></select></label><p id="play-status" class="muted">手动推进；切换股票不会改变日期。</p></section>
           <div class="section-head"><h2>交易操作</h2><span id="order-stock"></span></div>
           <p id="order-price" class="order-price"></p>
+          <div id="order-position" class="order-position" aria-live="polite"></div>
           <form id="order-form">
             <div class="trade-sides" role="group" aria-label="买卖方向"><button type="button" data-side="buy" class="buy active" aria-pressed="true">买入</button><button type="button" data-side="sell" class="sell" aria-pressed="false">卖出</button></div><input id="side" type="hidden" value="buy">
-            <label for="quantity" id="quantity-label">交易数量 / 手（1 手 = 100 股）</label><div class="lot-input"><button id="quantity-minus" type="button" aria-label="减少一手">−</button><input id="quantity" type="number" min="1" max="10000" step="1" value="1" required><button id="quantity-plus" type="button" aria-label="增加一手">＋</button></div>
+            <label for="quantity" id="quantity-label">委托数量 / 手</label><div class="lot-input"><button id="quantity-minus" type="button" aria-label="减少一手">−</button><input id="quantity" type="number" min="1" max="10000" step="1" value="1" required><button id="quantity-plus" type="button" aria-label="增加一手">＋</button></div>
             <div id="quantity-hint" class="quantity-hint">1 手 = 100 股</div>
             <div class="quick-quantity" aria-label="快捷数量"><button type="button" data-lots="1">1 手</button><button type="button" data-lots="5">5 手</button><button type="button" data-lots="10">10 手</button><button type="button" id="sell-all" hidden>卖出全部可申报持仓</button></div>
             <label id="odd-lot-wrap" class="odd-lot" hidden><input id="odd-lot" type="checkbox">按股处理零股卖出</label>
-            <div id="availability" class="availability"></div><div id="estimate" class="estimate" aria-live="polite">输入数量后查看估算。</div><button id="submit-order" class="primary full" type="submit" disabled>买入 · 下一开盘执行</button>
-          </form><p class="muted">今天收盘后提交，下一交易日开盘尝试成交。买单先冻结预算，未成交前可撤销。</p>
+            <div id="availability" class="availability"></div><div id="estimate" class="estimate" aria-live="polite">输入数量后查看估算。</div><button id="submit-order" class="primary full" type="submit" aria-describedby="estimate" disabled>提交委托</button>
+            <p class="order-help">推进到下一交易日前，可撤单后重新填写并提交。</p>
+            <section id="pending-orders" class="pending-orders" aria-label="待成交委托" hidden></section>
+          </form>
         </aside>
       </div>
-      <section id="report" class="card report" hidden><div class="section-head"><h2>组合训练报告</h2><span class="pill">训练已结束</span></div><div id="report-summary" class="metrics"></div><p id="report-note"></p><label>结束后复盘<select id="chart-mode"><option value="bounded">截至结束日期</option><option value="full">完整训练区间（含结束后的行情）</option></select></label></section>
+      <label id="review-range" class="review-range" hidden>结束后复盘范围<select id="chart-mode"><option value="bounded">截至结束日期</option><option value="full">完整训练区间（含结束后的行情）</option></select></label>
       <section class="card detail-panel"><div class="tabs" role="tablist" aria-label="组合账户明细"><button role="tab" aria-selected="true" data-tab="positions">全部持仓</button><button role="tab" aria-selected="false" data-tab="orders">订单与撤单</button><button role="tab" aria-selected="false" data-tab="fills">成交记录</button><button role="tab" aria-selected="false" data-tab="assets">资产曲线</button></div><div id="detail" role="tabpanel"></div><div id="asset-chart" hidden aria-label="组合总资产曲线"></div></section>
+      </div>
     </section>
   </main>
-  <footer>基于 KLinePlayground · 仅供历史模拟练习 · 本地自动保存</footer>
+  <footer>
+    <p class="footer-meta">基于 KLinePlayground · 本地自动保存</p>
+    <details class="footnotes"><summary>交易规则与数据说明</summary>
+      <div id="lobby-notes"><p id="source-note"></p></div>
+      <div id="session-notes" hidden><p id="simulation-note"></p><p id="chart-foot"></p><p id="report-note" hidden></p></div>
+      <p>所有股票共享现金和交易日期。收盘后提交委托，下一交易日开盘尝试成交，未成交前可撤单。买入按 100 股整数倍，T+1；零股卖出按整笔规则处理。冻结资金和股数不能重复使用。</p>
+      <p>买入预算预留价格缓冲，按实际成交价和费用结算，多余冻结资金退回；卖出所得成交后到账。自由选股采用固定模拟费率：佣金万三、最低 5 元，卖出印花税万五，过户费十万分之一。</p>
+      <p>多股对比以个股首个有效收盘价和组合初始资金为基准；停牌沿用最近有效收盘价，上市前留空。图表由 TradingView Lightweight Charts 提供。</p>
+    </details>
+  </footer>
   <dialog id="end-dialog"><h2>结束本次训练？</h2><p>将撤销全部待成交订单，按当前收盘估值生成报告。持仓不会强制卖出，结束后不能继续交易。</p><div class="actions"><button id="keep-training">继续练习</button><button id="confirm-end" class="primary">结束并查看报告</button></div></dialog>
+  <dialog id="reset-dialog" aria-labelledby="reset-dialog-title" aria-describedby="reset-description"><h2 id="reset-dialog-title">重置本次训练？</h2><p id="reset-description"></p><p>股票、日期区间和行情数据保持不变。本局持仓、委托、成交记录和总结将被清空，无法撤回。</p><div class="actions"><button id="keep-progress" type="button" autofocus>保留当前进度</button><button id="confirm-reset" type="button" class="danger">确认重置</button></div></dialog>
 </body>
 </html>

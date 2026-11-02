@@ -91,6 +91,7 @@ assert call("POST", path + "/restore", {}) == state
 | `POST /trainings/<id>/cancel` | `request_id/expected_version/order_id` |
 | `POST /trainings/<id>/advance` | `request_id/expected_version/expected_date` |
 | `POST /trainings/<id>/end` | `request_id/expected_version`，返回结束状态与报告 |
+| `POST /trainings/<id>/reset` | `request_id/expected_version`，将进行中或已结束训练恢复到起始日和初始资金，清空本局持仓、订单、成交、流水及总结；保持 UUID、固定行情和配置，版本继续递增 |
 | `GET /trainings/<id>/report` | 结束前 409；结束后返回报告和完整区间行情 |
 
 股票池为 1 至 20 只已支持的沪深主板股票，代码不重复。训练起止日须在已核验公共日历内。首版方向为 `buy/sell`，数量单位为股；初始资金和指定预算上限一万亿元，最多两位小数。仅接受约定字段，浏览器不能上传覆盖证明、公司行为、行情或“已核实”标记。

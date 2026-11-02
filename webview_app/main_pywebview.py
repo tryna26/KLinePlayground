@@ -11,7 +11,7 @@ import threading
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-VERSION = "4.0.0-rc.1"
+VERSION = "4.0.0-rc.2"
 
 
 def arguments(argv=None):

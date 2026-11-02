@@ -1,7 +1,7 @@
 """Shared-cash portfolio engine, independent of Flask and single-stock accounts.
 
 All mutations are prepared on a private copy, checked, committed in one SQLite
-transaction, then published in memory. Only advance can move the owned replay.
+transaction, then published in memory. Advance and reset can move the owned replay.
 """
 
 from copy import deepcopy
@@ -103,6 +103,18 @@ class PortfolioEngine:
             self._entry(state, "training_ended")
             return self._publish(state)
 
+    def reset(self):
+        """Restart this run on its pinned data, retaining a monotonic version."""
+        with self.__lock:
+            replay = self.__replay._engine_fork()
+            replay._engine_seek(self.__state.daily_assets[0].date)
+            initial = self.__state.account.initial_cash
+            state = PortfolioState(replay.current_date, Account(initial, initial))
+            self._entry(state, "opening", initial, reference="initial_cash")
+            self._record_entitlements(state, replay)
+            self._mark(state, replay)
+            return self._publish(state, replay)
+
     def report(self):
         with self.__lock:
             if self.__state.status != "ended":
@@ -113,6 +125,22 @@ class PortfolioEngine:
             for asset in self.__state.daily_assets:
                 peak = max(peak, asset.total_assets)
                 drawdown = max(drawdown, (peak - asset.total_assets) / peak)
+            sells = [fill for fill in self.__state.fills if fill.side == "sell"]
+            winning_sells = sum(fill.realized_pnl > ZERO for fill in sells)
+            breakdown = []
+            for position in snapshot["positions"]:
+                code = position["stock"]
+                realized = sum((entry.realized_delta for entry in self.__state.ledger
+                                if entry.stock == code), ZERO)
+                unrealized = number(position["unrealized_pnl"])
+                fills = [fill for fill in self.__state.fills if fill.stock == code]
+                breakdown.append(serialize({"stock": code, "quantity": position["quantity"],
+                    "market_value": number(position["market_value"]),
+                    "realized_pnl": realized, "unrealized_pnl": unrealized,
+                    "total_pnl": realized + unrealized, "fill_count": len(fills),
+                    "total_fees": sum((fill.fees["total"] for fill in fills), ZERO),
+                    "stale": position["valuation"].get("stale", False),
+                    "price_date": position["valuation"].get("price_date")}))
             full_replay = self.__replay._engine_fork()
             full_replay._engine_seek(full_replay._engine_end_date(), validate=False)
             return {"training_id": self.training_id, "status": "ended", "account": snapshot,
@@ -122,9 +150,13 @@ class PortfolioEngine:
                         "return_percent": money((last.total_assets / self.__state.account.initial_cash - 1) * 100),
                         "max_drawdown_percent": money(drawdown * 100),
                         "fill_count": len(self.__state.fills), "valuation_date": self.current_date,
+                        "trading_days": len(self.__state.daily_assets),
+                        "sell_fill_count": len(sells), "winning_sell_count": winning_sells,
+                        "sell_win_rate_percent": money(number(winning_sells) / len(sells) * 100) if sells else None,
                         "total_fees": sum((fill.fees["total"] for fill in self.__state.fills), ZERO),
                         "realized_pnl": self.__state.account.realized_pnl,
                         "unrealized_pnl": last.unrealized_pnl}),
+                    "stock_breakdown": breakdown,
                     "history": {code: full_replay.history(code) for code in full_replay.stocks},
                     "note": "按结束日期收盘估值，未强制平仓；完整行情仅用于结束后复盘。日线简化模拟。"}
 

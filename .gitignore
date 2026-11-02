@@ -41,3 +41,6 @@ dist/
 *.bak
 *.backup
 artifacts/
+
+# Local installed copy, including its private runtime data
+/KLinePlayground/

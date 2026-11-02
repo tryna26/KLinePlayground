@@ -1,159 +1,55 @@
+# KLinePlayground · A 股组合复盘训练
 
+在同一个历史日期，用一份资金管理多只股票，练习选股、仓位分配和调仓，再通过收益曲线与交易记录复盘自己的决策。
 
-# A股K线复盘训练 - PyWebView桌面版
+**[下载 Windows 版](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.2) · [第一次使用](docs/USER_GUIDE.md) · [版本更新](release_notes_v4.0.0-rc.2.md)**
 
-> 本 Fork 基于 [fat7/KLinePlayground v3.2](https://github.com/fat7/KLinePlayground)，由 tryna26 维护组合训练改造，保留上游历史与 MIT 署名。阶段一至六的实现、测试、文档和 Windows 候选包已完成，版本为 **4.0.0-rc.1**。
->
-> **直接使用：[下载 Windows 候选包](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.1) · [新手指南](docs/USER_GUIDE.md)**。支持共享资金、多股持仓、下一开盘成交、T+1、自动保存、自动播放、均线和上方“单股 K 线 / 多股对比”视图切换。
->
-> 当前源码：从“新建训练”选择单股票或组合训练，两者均支持指定模式和随机盲盒。组合可自由选择 1–20 只 A 股、数据源和日期，开始时自动加载日线，无需预先核验；非交易日起止会对齐区间内交易日。自由组合采用固定模拟费率，不计分红送转，缺失行情不成交。已发布的 v4.0.0-rc.1 安装包仍为旧版三只银行股范围，需重新构建才包含这些修改。
->
-> Windows x64 候选包需要 Microsoft Edge WebView2 Runtime，未做代码签名；安装包和便携包附 SHA256，不附真实行情库、用户记录或 API 凭据。原单股入口保留，旧独立 AI 测试器不在本候选包内；下方保留上游历史功能介绍。
->
-> 开发使用标准 Python **3.13.17** 和固定依赖，从 `python run_dev.py` 启动。合成样本需显式 `--portfolio-demo`，真实数据不需要此开关。[开发说明](docs/DEVELOPMENT.md) · [构建指南](BUILD_GUIDE.md) · [阶段六验收](docs/STEP6_VERIFICATION.md) · [故障排查](docs/TROUBLESHOOTING.md) · [基线与来源](docs/BASELINE.md)。
+![组合训练界面](docs/screenshots/portfolio-ui-v2.png)
 
-![安装版组合训练](docs/screenshots/phase6-installed-comparison.png)
+## 重点功能
 
-[![支持与服务](https://img.shields.io/badge/Support%20%26%20Services-联系作者-blue?style=for-the-badge )](https://github.com/fat7/KLinePlayground#%E2%9A%99%EF%B8%8F-%E6%94%AF%E6%8C%81%E4%B8%8E%E6%9C%8D%E5%8A%A1 )
+- **自由组合与随机盲盒**：选择 1–20 只 A 股、日期区间和初始资金，或按板块、数量与训练时长随机抽取组合；同时保留单股票训练。
+- **一份账户，多股联动**：所有股票共享现金与公共交易日期，切换股票只切换视图；持仓总股数、可卖股数和委托冻结数量清楚显示。
+- **K 线与组合一起看**：单股日 K、成交量、悬停行情和 MA 均线；切换多股对比，观察个股走势与账户收益。训练中图表仅展示已走到的日期。
+- **完整的委托操作**：收盘后提交，下一交易日开盘尝试成交；支持 T+1、资金与股份冻结、撤单及撤单后修改。同股、同方向、同执行日期的待成交委托汇总展示，展开后逐笔操作。
+- **自动推进与进度保存**：手动或自动播放公共交易日，每次操作自动保存；关闭后继续原进度，也可以确认后重置本局，从原股票和起始日期重新练习。
+- **结束后有复盘**：收益率、资产曲线、最大回撤、成交与费用、各股盈亏贡献；交易明细和完整训练区间可回看，历史总结单独保留在训练列表。
 
-一款专为A股投资者设计的专业级K线复盘与模拟交易训练工具。深度模拟真实交易环境，支持动态复权、多维度技术指标及AI辅助点评。
+![组合训练总结](docs/screenshots/portfolio-summary-20261029.png)
 
-## 🌟 核心亮点
-### AI 介入测试与智能助理 (`ai_assistant_tester.py`)
-首创 AI 介入模式。通过独立的 AI 策略测试器，您可以：
-- 接入 AI 模型（如 GPT-4）进行实时行情分析。
-- 自动化执行买入、卖出及观望操作。
-- 零代码测试您的量化逻辑，或与 AI 共同完成实盘模拟。
+## 下载与开始
 
----
+当前版本为 **4.0.0-rc.2**，提供 Windows 10/11 x64 安装包和便携 ZIP，均需要 Microsoft Edge WebView2 Runtime。
 
-## 🚀 最新功能
+1. 从 [GitHub Releases](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.2) 下载，按同页 `SHA256SUMS.txt` 校验文件。候选包尚未做代码签名。
+2. 安装后启动；便携版解压后运行 `KLinePlayground/bin/KLinePlayground.exe`。
+3. 创建本地用户，点击“新建训练”，选择单股票或组合训练，再选指定模式或随机盲盒。
+4. 组合指定模式输入股票、日期和资金后直接开始，系统自动加载行情，无需先准备三只固定股票的数据。
 
-- **AI 智能策略**: 把软件交给AI大模型，让TA来执行你的策略/扮演设定的角色自动进行交易，探索更多策略。
-- **AI 复盘点评**: 训练结束后一键生成 AI 点评，获取深度盘后分析建议。
-- **专业级图表**: 删掉了大家反馈的MA标签遮挡。
-- **自定义 MA 周期**: 支持增删改查最多 6 条均线（如 MA5, MA10, MA20, MA60, MA120, MA250），颜色自动配色。
-- **离线数据接入**: 支持使用离线数据，告别网络接口的不稳定。
+详细操作见[新手指南](docs/USER_GUIDE.md)。数据或启动遇到问题，见[故障排查](docs/TROUBLESHOOTING.md)。
 
+## 训练方式
 
-## ✨ 主要功能
-*   **AI 智能策略**: 把软件交给AI大模型，让TA来执行你的策略/扮演设定的角色自动进行交易，探索更多策略。
-*   **专业级图表**: 基于 TradingView Lightweight Charts，支持缩放、十字线同步及多维数据展示。
-*   **全能指标库**: 集成 MACD、KDJ、RSI、BOLL 等核心技术指标，支持主附图自由切换。
-*   **AI 复盘点评**: 训练结束后一键生成 AI 点评，获取深度盘后分析建议。
-*   **多用户系统**: 支持创建和切换多个用户，每个用户的训练数据和交易设置都独立保存。
-*   **两种训练模式**:
-    *   **指定模式**: 用户可以自行选择任意A股代码和起始日期进行训练。
-    *   **盲盒模式**: 系统随机抽取一只股票和起始时间，用于无偏见的“盲抽”式训练。
-*   **高度仿真的交易环境**:
-    *   **动态复权**: 支持不复权、前复权、后复权和**动态前复权**，确保价格的连续性和真实性。
-    *   **成本计算**: 精确模拟交易佣金（可设置费率和最低佣金）和印花税。
-    *   **T+1 规则**: 模拟A股市场的T+1交易制度，当日买入的股票次日才能卖出。
-*   **丰富的图表与指标**:
-    *   **专业K线图**: 使用 `Lightweight Charts` 渲染，性能优异，交互流畅。
-    *   **技术指标**: 内置 `MACD`, `KDJ`, `RSI`, `BOLL` 等常用技术指标，并可在图表上动态切换。
-    *   **自定义 MA 周期**: 支持增删改查最多 6 条均线（如 MA5, MA10, MA20, MA60, MA120, MA250），颜色自动配色。
-    *   **交易标记**: 买卖点会在K线上自动标记，方便复盘。
-*   **完善的复盘与统计**:
-    *   **实时账户更新**: 总资产、可用资金、持仓市值、浮动盈亏等信息实时更新。
-    *   **详细复盘报告**: 每局训练结束后，自动生成包含总收益率、交易明细、胜率等关键指标的复盘报告。
-    *   **用户数据统计**: 自动追踪和展示用户的累计收益、总训练次数、局胜率等长期表现数据。
-*   **高效的交互体验**:
-    *   **回放控制**: 支持手动“下一根K线”或设置不同速度的自动播放。
-    *   **键盘快捷键**: 支持使用 `B/S`、`空格`、`数字键` 等快捷键进行快速买卖和播放控制。
-    *   **跨平台桌面应用**: 基于 `PyWebView`，可打包成Windows、macOS或Linux原生桌面应用，无需浏览器。
+组合训练表示“截至公共日期收盘后作决策”。提交委托先占用预算或股份，推进到下一交易日后再按开盘价和规则检查成交。下单区可直接查看待成交委托，撤单后释放占用；修改需要重新提交。
 
+指定模式支持与单股训练共用的在线日线和本地离线数据，起止日期遇到非交易日会对齐区间内交易日。随机盲盒需要所选股票具有共同可用的行情区间。在线数据依赖提供方服务；下载失败时可更换数据源或补充离线数据。
 
-这是一个基于 `PyWebView`、`Flask` 和 `Lightweight Charts` 构建的A股K线复盘训练桌面应用。它允许用户在真实的历史行情数据上进行模拟交易，以训练和提升自己的盘感、策略和决策能力。
+这是**历史日线简化模拟**：无法还原盘中盘口、排队、部分成交或盘中禁撤时段。自由组合使用未复权行情和固定模拟费率，不计分红送转，不用于精确历史收益回测或实盘交易。旧版已核验训练恢复后继续使用保存时的快照与规则。
 
-该应用将Python后端（数据处理、交易逻辑）与现代Web前端（图表展示、用户交互）相结合，提供了一个功能丰富、响应迅速的本地化训练环境。
- ![show_pic_1](https://github.com/user-attachments/assets/e516c90f-9312-4811-991f-f0852a7dff58)
- ![show_pic_2](https://github.com/user-attachments/assets/ef5286a0-8ebc-4c73-81ff-9b518a4b3fea)
- ![show_pic_3](https://github.com/user-attachments/assets/7910546f-ffba-4213-a6ef-89793450dee5)
- ![show_pic_4](https://github.com/user-attachments/assets/ef25345c-284c-47e7-91c0-dde613922065)
- ![show_pic_5](https://github.com/user-attachments/assets/68b91828-df3b-44fc-a932-86c0c08eae0e)
- ![show_pic_6](https://github.com/user-attachments/assets/80865a69-40a2-4acc-b9e7-3cdf92fe5a75)
+## 源码运行
 
----
+使用 Python **3.13.17**，在项目根目录执行：
 
-## 🛠️ 技术栈
-
-*   **桌面应用框架**: `PyWebView` - 用于将Web前端打包成原生GUI应用。
-*   **后端**: `Flask` - 提供API接口，处理数据请求和交易逻辑。
-*   **前端**:
-    *   `HTML5` / `CSS3` / `JavaScript (ES6+)`
-    *   `Lightweight Charts™` - 用于高性能的金融图表绘制。
-*   **数据处理**: `Pandas`, `Numpy` - 用于高效处理和计算K线数据。
-*   **数据源**: `Akshare` - 用于获取A股历史行情数据。
-*   **数据存储**: `SQLite` - 用于存储每个用户的交易历史、设置和统计数据。
-*   **AI 集成**: OpenAI API / 本地 API 桥接
----
-
-## 📦 安装与启动
-
-### 环境准备
-```bash
-pip install -r requirements.txt
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe run_dev.py
 ```
 
-### 运行程序
-1. **桌面客户端 (推荐)**:
-   ```bash
-   python run_dev.py --desktop
-   ```
-2. **AI 介入测试器**:
-   ```bash
-   python ai_assistant_tester.py
-   ```
-3. **Web 服务版 (CLI模式)**:
-   ```bash
-   python run_dev.py
-   ```
+打开 <http://127.0.0.1:5050>。桌面窗口使用 `python run_dev.py --desktop`。开发数据默认写入 `.runtime/data` 和 `.runtime/users`，可通过 `--home`、`--data-dir`、`--users-dir` 指定；安装包和源码均不附用户记录、真实行情库或 API 凭据。
 
----
+开发与测试见 [DEVELOPMENT.md](docs/DEVELOPMENT.md)，Windows 构建见 [BUILD_GUIDE.md](BUILD_GUIDE.md)，组合接口见 [PORTFOLIO_API.md](docs/PORTFOLIO_API.md)。
 
-| 路径 | 说明 |
-| :--- | :--- |
-| `webview_app/` | 桌面版核心程序入口 |
-| `ai_assistant_tester.py` | AI 介入与策略测试工具 |
-| `backend/` | 包含 `app_enhanced.py` 等所有核心逻辑 |
-| `frontend/` | 包含 `index_enhanced.html` 及其 JS/CSS 资源 |
-| `run_dev.py` | 开发 Web / 桌面启动入口，支持独立数据和用户目录 |
-| `requirements.txt` | 环境依赖列表 |
+## 来源与许可
 
-
-## 📜 开源许可
-
-本项目采用 [MIT License](LICENSE) 开源。
-
-## ⚙️ 支持与服务
-
-本项目是一个开源软件，作者投入了大量时间和精力进行开发和维护。如果您觉得这个项目对您有帮助，可以通过以下方式支持作者：
-
-### 接受赞赏 (Sponsor)
-
-您的支持是作者持续更新和改进项目的最大动力！欢迎通过支付宝或微信扫码赞赏。
-
-| 支付宝 (Alipay) | 微信支付 (WeChat Pay) |
-| :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/f7fa53b8-cdb1-4a0c-9677-ce5d0c60c1a7" alt="Alipay QR Code" width="180"> | <img src="https://github.com/user-attachments/assets/955c873f-de30-4496-ac16-9f0b3c2c39c8" alt="WeChat Pay QR Code" width="180"> |
-
-### 离线数据包领取&技术讨论
-| wx群聊 | 小红书群聊 |
-| :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/a449d864-767e-4c7d-8b64-b27aae51c807" alt="WX QR Code" width="180"> |  |
-
-### 商业服务 (Commercial Services)
-
-除了开源版本外，本人（作者）也可以提供一系列付费的商业服务，以满足个人、团队或企业的深度需求。如果您有以下任何需求，欢迎通过 [GitHub Issues](https://github.com/fat7/KLinePlayground/issues) 或其他联系方式与我取得联系：
-
-*   **技术支持服务**: 为您在使用过程中遇到的问题提供优先级的技术支持和解决方案。
-*   **定制化开发**: 根据您的具体需求，对软件进行功能定制、添加新指标、对接特定数据源或API等。
-*   **企业内训**: 为您的团队提供关于项目架构、量化交易基础、代码实现等方面的培训。
-*   **咨询服务**: 提供与项目相关的技术选型、架构设计、策略实现等方面的专业咨询。
----
-
-## 📜 许可证与免责声明
-
-本项目仅供学习和投研交流使用，不构成任何投资建议。如需商用请联系作者。
-**投资有风险，入市需谨慎。**
+本项目由 tryna26 基于 [fat7/KLinePlayground v3.2](https://github.com/fat7/KLinePlayground) 二次开发，重点扩展多股票组合训练与复盘。保留原作者版权，沿用 [MIT 许可](LICENSE)；依赖声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

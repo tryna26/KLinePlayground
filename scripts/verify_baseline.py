@@ -132,7 +132,13 @@ def main():
                                    "external working directory", "independent data/users directories"],
                         "online": online_summary}, ensure_ascii=False, indent=2))
             finally:
-                process.terminate()
+                if os.name == "nt" and process.poll() is None:
+                    # A Windows venv launcher may own a second Python process;
+                    # wait() on the launcher alone can leave SQLite files open.
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                   check=True, stdout=subprocess.DEVNULL)
+                else:
+                    process.terminate()
                 process.wait(timeout=15)
 
 

@@ -68,6 +68,38 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(engine.snapshot()["account"]["available_cash"], "1500.00")
         self.assertEqual(self.buy(engine, 100, "000001", "third")["status"], "pending")
 
+    def test_report_without_trades_has_no_sell_win_rate_or_phantom_positions(self):
+        engine = self.engine()
+        engine.end()
+        report = engine.report()
+        self.assertIsNone(report["summary"]["sell_win_rate_percent"])
+        self.assertEqual(report["summary"]["trading_days"], 1)
+        self.assertEqual(report["summary"]["sell_fill_count"], 0)
+        self.assertEqual(len(report["stock_breakdown"]), 3)
+        self.assertTrue(all(row["total_pnl"] == "0.00" for row in report["stock_breakdown"]))
+
+    def test_report_contributions_include_dividend_and_remaining_position(self):
+        self.action()
+        engine = self.engine()
+        self.buy(engine)
+        self.advance(engine)
+        engine.submit("600000", "sell", 100, request_id="sell-report")
+        self.advance(engine)
+        self.advance(engine)  # dividend credited on Jan 5 to Jan 3 record-date shares
+        engine.end()
+        report = engine.report()
+        summary = report["summary"]
+        contribution = next(row for row in report["stock_breakdown"] if row["stock"] == "600000")
+        self.assertEqual(contribution["quantity"], 100)
+        self.assertEqual(contribution["fill_count"], 2)
+        self.assertEqual(summary["sell_fill_count"], 1)
+        self.assertEqual(summary["winning_sell_count"], 1)
+        self.assertEqual(summary["sell_win_rate_percent"], "100.00")
+        sell_pnl = sum(Decimal(fill["realized_pnl"]) for fill in report["account"]["fills"])
+        self.assertEqual(Decimal(contribution["realized_pnl"]), sell_pnl + Decimal("40.00"))
+        self.assertEqual(sum(Decimal(row["total_pnl"]) for row in report["stock_breakdown"]), Decimal(summary["total_pnl"]))
+        self.assertEqual(sum(Decimal(row["total_fees"]) for row in report["stock_breakdown"]), Decimal(summary["total_fees"]))
+
     def test_next_open_fee_and_exact_partial_sale(self):
         engine = self.engine()
         self.buy(engine)
@@ -304,6 +336,41 @@ class EngineTests(unittest.TestCase):
         self.advance(engine, "next")
         self.assertEqual(engine.advance(operation_id="same", expected_date="2024-01-02"), result)
         self.assertEqual(str(engine.current_date), "2024-01-04")
+
+    def test_reset_failure_preserves_live_cursor_and_account(self):
+        store = PortfolioLedgerStore()
+        self.addCleanup(store.close)
+        engine = self.engine(store=store)
+        self.buy(engine)
+        self.advance(engine)
+        before = engine.snapshot()
+        with patch.object(store, "_before_commit", side_effect=OSError("disk")):
+            with self.assertRaises(OSError):
+                engine.reset()
+        self.assertEqual(engine.snapshot(), before)
+        self.assertEqual(str(engine.current_date), "2024-01-03")
+        self.assertEqual(store.read(engine.training_id)["version"], before["version"])
+        reset = engine.reset()
+        self.assertEqual(reset["current_date"], "2024-01-02")
+        self.assertEqual(reset["version"], before["version"] + 1)
+        engine.reconcile()
+
+    def test_reset_replays_corporate_actions_from_new_entitlements(self):
+        self.action()
+        engine = self.engine()
+        self.buy(engine)
+        for _ in range(3):
+            self.advance(engine)
+        self.assertTrue(engine.snapshot()["applied_actions"])
+        reset = engine.reset()
+        self.assertEqual(reset["applied_actions"], [])
+        for _ in range(3):
+            self.advance(engine, key=f"new-run-{engine.current_date}")
+        current = engine.snapshot()
+        self.assertEqual(current["account"]["cash"], "100000.00")
+        self.assertEqual(current["account"]["realized_pnl"], "0.00")
+        self.assertEqual(len(current["applied_actions"]), 1)
+        engine.reconcile()
 
     def test_concurrent_retries_do_not_double_fill(self):
         engine = self.engine()

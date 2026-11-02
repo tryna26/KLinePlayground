@@ -4,6 +4,7 @@
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
     const fmt = value => Number(value ?? 0).toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2});
+    const shares = value => Number(value ?? 0).toLocaleString('zh-CN');
     const signed = value => `${Number(value) > 0 ? '+' : ''}${fmt(value)}`;
     const tone = value => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
     const statusNames = {trading:'正常交易',suspended:'停牌',not_listed:'尚未上市',delisted:'已退市',download_failed:'下载失败',cache_missing:'缓存缺失',unknown:'原因未明',invalid:'行情无效',no_trades:'无有效成交',market_closed:'休市',unsupported:'暂不支持'};
@@ -12,7 +13,8 @@
     let busy = false, pending = null, checked = null, tab = 'positions', report = null, feeRange = null;
     let quoteSeq = 0, estimateSeq = 0, searchSeq = 0, previewSeq = 0;
     let searchTimer, estimateTimer, estimateValid = false;
-    let priceChart, candle, volumeChart, volume, assetChart, assetLine;
+    let priceChart, candle, volumeChart, volume, assetChart, assetLine, reportChart, reportLine;
+    let reviewOpen = false;
     let chartRows = [], maSeries = new Map(), maData = new Map();
     let comparisonChart, comparisonLines = new Map(), comparisonSeq = 0;
     let historyCache = new Map(), playing = false, playTimer = null, playGeneration = 0;
@@ -52,7 +54,7 @@
     const metric = (label, value, detail = '', cls = '') => `<div class="metric"><span>${esc(label)}</span><strong class="${cls}">${esc(value)}</strong>${detail ? `<small>${esc(detail)}</small>`:''}</div>`;
     function controls() {
         const locked = busy || !!pending;
-        for (const id of ['profile','check','refresh-list','source','prepare-data','search','cash','start','end','setup-mode','random-count','random-days','random-sector','side','quantity','exit','end-training','chart-mode']) $(id).disabled = locked;
+        for (const id of ['profile','check','refresh-list','source','prepare-data','search','cash','start','end','setup-mode','random-count','random-days','random-sector','side','quantity','exit','end-training','reset-training','confirm-reset','chart-mode','report-new','report-review']) $(id).disabled = locked;
         for (const id of ['side','quantity']) $(id).disabled = locked || state?.status === 'ended';
         $('create').disabled = locked || ($('setup-mode').value !== 'random' && !selected.size);
         $('check').hidden = $('setup-mode').value === 'random';
@@ -64,16 +66,18 @@
         $('submit-order').disabled = locked || !estimateValid || state?.status !== 'active';
         $('retry-panel').hidden = !pending || busy;
         $('retry').disabled = busy;
-        document.querySelectorAll('[data-restore],[data-cancel],[data-remove],[data-add],[data-stock],[data-side],[data-lots],#quantity-minus,#quantity-plus,#odd-lot,#sell-all').forEach(button => {button.disabled = locked || (state?.status === 'ended' && !button.hasAttribute('data-stock'));});
+        document.querySelectorAll('[data-restore],[data-cancel],[data-edit-order],[data-remove],[data-add],[data-stock],[data-side],[data-lots],#quantity-minus,#quantity-plus,#odd-lot,#sell-all').forEach(button => {button.disabled = locked || (state?.status === 'ended' && !button.hasAttribute('data-stock') && !button.hasAttribute('data-restore'));});
         const buy = $('side').value === 'buy';
         document.querySelectorAll('[data-side]').forEach(button => {
             const active = button.dataset.side === $('side').value;
             button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
         });
-        $('submit-order').textContent = `${buy?'买入':'卖出'} ${orderShares() ? `${orderShares()} 股` : ''} · 下一开盘执行`;
-        $('submit-order').classList.toggle('sell-order',!buy);
+        $('submit-order').textContent = state?.status === 'ended' ? '训练已结束' : '提交委托';
         $('sell-all').hidden = buy;
         $('odd-lot-wrap').hidden = buy;
+        $('lobby-notes').hidden = !!state;
+        $('session-notes').hidden = !state;
+        $('report-note').hidden = !report;
     }
     function fingerprint() {return JSON.stringify(createParams());}
     function createParams() {return {stocks:[...selected.keys()],start_date:$('start').value,end_date:$('end').value,initial_cash:$('cash').value,data_source:$('source').value,
@@ -150,7 +154,11 @@
     }
     async function listTrainings() {
         const data = await api('/api/portfolio/trainings');
-        $('training-list').innerHTML = data.trainings.map(row => `<div class="saved"><div><strong>${esc(row.current_date)} · ${row.config.stocks.length} 只股票 ${row.config.synthetic?'· 合成演示':'· 真实日线'}</strong><p>${esc(row.config.start_date)} 至 ${esc(row.config.end_date)} · ${row.status === 'ended'?'已结束':'自动保存'}<br>${esc(row.training_id.slice(0,8))}</p></div><button data-restore="${esc(row.training_id)}">${row.status === 'ended'?'查看报告':'继续训练'}</button></div>`).join('') || '<div class="empty">暂无组合记录。创建第一份练习吧。</div>';
+        const group = (ended, title) => {
+            const rows = data.trainings.filter(row => (row.status === 'ended') === ended);
+            return rows.length ? `<h3 class="list-group-title">${title}<span>${rows.length}</span></h3>${rows.map(row => `<div class="saved"><div><span class="pill ${ended?'':'in-progress'}">${ended?'已完成':'进行中'}</span><strong>${row.config.stocks.length} 只股票 · ${esc(row.current_date)}</strong><p>${esc(row.config.start_date)} 至 ${esc(row.config.end_date)}<br>${row.config.synthetic?'合成练习':'历史日线'} · ${esc(row.training_id.slice(0,8))}</p></div><button class="${ended?'':'primary'}" data-restore="${esc(row.training_id)}">${ended?'查看总结':'继续训练 →'}</button></div>`).join('')}` : '';
+        };
+        $('training-list').innerHTML = group(false,'待继续') + group(true,'已完成的训练') || '<div class="empty">还没有组合训练记录。<br>从左侧新建一局，进度会自动保存在这里。</div>';
         controls();
     }
     async function transact(url, body) {
@@ -159,11 +167,15 @@
         pending = {url,body}; sessionStorage.setItem(pendingKey(), JSON.stringify(pending)); controls();
         try {
             const result = await api(url,body);
+            if (url.endsWith('/reset')) {
+                clearTimeout(estimateTimer);
+                historyCache.clear(); reviewOpen = false; selectedStock = null; tab = 'positions';
+                $('side').value = 'buy'; $('odd-lot').checked = false; $('quantity').value = '1';
+            }
             // A retry can return an older original response. Always re-read authority.
             await openTraining(result.training_id, true);
             pending = null; sessionStorage.removeItem(pendingKey());
-            message('操作已保存。');
-            return true;
+            message(url.endsWith('/reset') ? '重置已保存，当前训练进度已更新。' : state.status === 'ended' ? '训练已结束，总结已保存。' : '操作已保存。');
         } catch (error) {
             if (error.status && error.status !== 503) {
                 pending = null; sessionStorage.removeItem(pendingKey());
@@ -173,10 +185,18 @@
             stopPlayback('自动播放已暂停，请先处理提示或重试原操作。');
             return false;
         } finally {busy = false; controls();}
+        // Ending is a separate, persisted request after the previous lock is released.
+        if (state.status === 'active' && !state.next_date) return await finishAtRangeEnd();
+        return true;
     }
     async function mutate(action, extra = {}) {
         if (busy || pending || !state) return false;
         return await transact(`${path()}/${action}`, {request_id:crypto.randomUUID(),expected_version:state.version,...extra});
+    }
+    async function finishAtRangeEnd() {
+        if (busy || pending || state?.status !== 'active' || state.next_date) return false;
+        stopPlayback('训练区间已走完，正在生成总结…');
+        return await mutate('end');
     }
     async function openTraining(id, internal = false) {
         if (!internal && (busy || pending)) return;
@@ -184,6 +204,8 @@
         if (!internal) {busy = true; message(''); controls();}
         try {
             const restored = await api(`/api/portfolio/trainings/${encodeURIComponent(id)}/restore`, {});
+            const openingReport = restored.status === 'ended' && (state?.training_id !== id || state?.status !== 'ended' || !report);
+            if (state?.training_id !== id || openingReport) reviewOpen = false;
             if (state?.training_id !== restored.training_id || state?.current_date !== restored.current_date) historyCache.clear();
             state = restored;
             if (['synthetic-demo','synthetic-practice'].includes(state.config.data_source)) {
@@ -198,12 +220,16 @@
             report = null; $('chart-mode').value = 'bounded';
             if (state.status === 'ended') report = await api(`${path()}/report`);
             render(); await Promise.all([drawStock(),drawComparison()]); await estimateOrder();
+            if (report) drawReportEquity();
+            if (openingReport) {window.scrollTo(0,0);$('report').focus({preventScroll:true});}
         } finally {if (!internal) {busy = false; controls();}}
+        if (!internal) await finishAtRangeEnd();
     }
     function render() {
         const last = state.daily_assets.at(-1), pnl = Number(last.total_assets)-Number(state.account.initial_cash);
         $('date').textContent = state.current_date;
-        $('session-note').textContent = `${state.status === 'ended'?'已结束':'自动保存'} · ${state.config.stocks.length} 只股票 · ${state.config.start_date} 至 ${state.config.end_date}`;
+        $('session-note').textContent = `${state.status === 'ended'?'已结束':'自动保存'} · ${state.config.stocks.length} 只股票 · ${state.config.start_date} 至 ${state.config.end_date}${state.synthetic?' · 合成练习':''}`;
+        $('session-eyebrow').textContent = report ? '训练完成 · 组合复盘' : '共同时间 · 收盘后决策';
         $('simulation-note').textContent = state.synthetic ? '合成练习 · 价格、历史状态和交易日历均为人工样本。订单最早在下一公共交易日开盘尝试成交。' : state.config.practice
             ? `${state.config.data_source} 历史日线 · 自由选股${state.config.mode==='random'?' · 随机盲盒':''} · 未复权价格、固定模拟费率；不计分红送转，缺失行情不成交。日线无法还原实际盘口与排队。`
             : `${state.config.data_source} 历史日线 · 使用未复权成交价和历史费率；日线简化模拟无法还原实际盘口与排队。`;
@@ -211,16 +237,46 @@
         $('stock-count').textContent = `${state.config.stocks.length} 只`;
         $('stocks').innerHTML = state.quotes.map(quote => {
             const position = state.positions.find(p => p.stock === quote.stock);
-            return `<button class="stock-button ${selectedStock === quote.stock?'active':''}" data-stock="${esc(quote.stock)}"><span class="stock-line"><strong>${esc(quote.stock)}</strong><span>${quote.bar?fmt(quote.bar.close):'—'}</span></span><small>${esc(names.get(quote.stock)||'沪深主板')} · ${esc(statusNames[quote.status]||quote.status)}</small><small id="change-${esc(quote.stock)}">涨跌计算中…</small><small>${position.quantity ? `持有 ${position.quantity} 股`:'未持有'}${position.valuation.stale?' · 使用历史价估值':''}</small></button>`;
+            return `<button class="stock-button ${selectedStock === quote.stock?'active':''}" data-stock="${esc(quote.stock)}"><span class="stock-line"><strong>${esc(quote.stock)}</strong><span>${quote.bar?fmt(quote.bar.close):'—'}</span></span><small>${esc(names.get(quote.stock)||'沪深主板')} · ${esc(statusNames[quote.status]||quote.status)}</small><small id="change-${esc(quote.stock)}">涨跌计算中…</small><span class="stock-holding ${position.quantity?'has-position':''}"><span>持仓</span><strong>${shares(position.quantity)} <span>股</span></strong></span><small>当前可卖 ${shares(position.sellable_now)} 股${position.frozen_shares?` · 冻结 ${shares(position.frozen_shares)} 股`:''}</small>${position.valuation.stale?'<small>使用历史价估值</small>':''}</button>`;
         }).join('');
         for (const quote of state.quotes) updateChange(quote, state.training_id, state.current_date);
         $('report').hidden = !report;
-        if (report) {
-            const s = report.summary;
-            $('report-summary').innerHTML = metric('总收益 / 元',signed(s.total_pnl),`收益率 ${s.return_percent}%`,tone(s.total_pnl)) + metric('最大回撤',`${s.max_drawdown_percent}%`) + metric('成交 / 总费用',`${s.fill_count} 笔`,`${fmt(s.total_fees)} 元`) + metric('已实现 / 未实现',signed(s.realized_pnl),`${signed(s.unrealized_pnl)} 元`);
-            $('report-note').textContent = report.note;
-        }
+        $('review-workspace').hidden = !!report && !reviewOpen;
+        $('review-range').hidden = !report;
+        if (report) renderReport();
         renderDetails(); controls();
+    }
+    function renderReport() {
+        const s = report.summary, account = report.account;
+        const held = account.positions.filter(p => p.quantity > 0);
+        $('report-period').textContent = `${state.config.start_date} — ${s.valuation_date} · ${s.trading_days} 个交易日 · ${state.config.stocks.length} 只股票${state.synthetic?' · 合成练习':''}`;
+        $('report-return').textContent = `${signed(s.return_percent)}%`;
+        $('report-return').className = tone(s.total_pnl);
+        $('report-verdict').textContent = !s.fill_count ? '本次没有成交，完成了一次持币观察。' : Number(s.total_pnl) > 0 ? '本次组合取得正收益，回看盈利来自哪些选择。' : Number(s.total_pnl) < 0 ? '本次组合出现亏损，从回撤和各股贡献开始复盘。' : '本次组合盈亏持平，回看交易与费用的影响。';
+        $('report-capital').textContent = `¥${fmt(s.initial_cash)} → ¥${fmt(s.final_assets)}`;
+        $('report-pnl').textContent = `累计盈亏 ${signed(s.total_pnl)} 元 · 可用现金 ${fmt(account.account.available_cash)} 元`;
+        $('report-summary').innerHTML = metric('最大回撤',`${fmt(s.max_drawdown_percent)}%`,'按每日收盘总资产计算') + metric('成交笔数',`${s.fill_count} 笔`,`卖出 ${s.sell_fill_count} 笔`) + metric('交易费用',`¥${fmt(s.total_fees)}`,'已计入总收益，不重复扣减') + metric('盈利卖出占比',s.sell_win_rate_percent === null ? '—' : `${fmt(s.sell_win_rate_percent)}%`,s.sell_fill_count ? `${s.winning_sell_count} / ${s.sell_fill_count} 笔卖出盈利` : '尚无卖出成交，不计算胜率');
+        const notes = [
+            `已实现盈亏 ${signed(s.realized_pnl)} 元，持仓浮动盈亏 ${signed(s.unrealized_pnl)} 元。${held.length ? `结束时仍持有 ${held.length} 只股票，按收盘估值计入资产。` : '结束时没有持仓。'}`,
+            `本次最大回撤 ${fmt(s.max_drawdown_percent)}%。可以结合资产曲线，回看回撤发生时的持仓和调仓。`,
+            s.fill_count ? `共成交 ${s.fill_count} 笔，费用占初始资金的 ${fmt(Number(s.total_fees)/Number(s.initial_cash)*100)}%。回看每次换手是否符合原先的交易理由。` : '本次没有实际成交。下一次可以先写下入场条件，再观察条件是否出现。'
+        ];
+        const stale = held.filter(p => p.valuation.stale);
+        if (stale.length) notes.push(`${stale.length} 只持仓在结束日没有有效收盘价，沿用最近历史价估值；各股表格已标明日期。`);
+        $('report-insights').innerHTML = notes.map(note=>`<li>${esc(note)}</li>`).join('');
+        $('report-stocks').innerHTML = table(['股票','成交','已实现 / 元','浮动盈亏 / 元','总贡献 / 元','结束持仓'],[...report.stock_breakdown].sort((a,b)=>Number(b.total_pnl)-Number(a.total_pnl)).map(row=>`<tr>${td(stockLabel(row.stock))}${td(`${row.fill_count} 笔`)}<td class="${tone(row.realized_pnl)}">${signed(row.realized_pnl)}</td><td class="${tone(row.unrealized_pnl)}">${signed(row.unrealized_pnl)}</td><td class="${tone(row.total_pnl)}"><strong>${signed(row.total_pnl)}</strong></td><td>${esc(row.quantity)} 股${row.stale && row.quantity ? `<small>沿用 ${esc(row.price_date)} 估值</small>`:''}</td></tr>`));
+        $('report-note').textContent = `${report.note} 盈利卖出占比按每笔卖出成交统计，未卖出的持仓不计入该比例。`;
+        $('report-review').textContent = reviewOpen ? '收起 K 线与交易明细' : '查看 K 线与交易明细';
+        $('report-review').setAttribute('aria-expanded',String(reviewOpen));
+    }
+    function drawReportEquity() {
+        if (!window.LightweightCharts || !report) return;
+        if (!reportChart) {
+            reportChart = makeChart($('report-equity'));
+            reportLine = reportChart.addSeries(LightweightCharts.AreaSeries,{lineColor:'#2465ba',topColor:'#2465ba30',bottomColor:'#2465ba03',lineWidth:2});
+        }
+        reportLine.setData(report.account.daily_assets.map(a=>({time:a.date,value:Number(a.total_assets)})));
+        reportChart.timeScale().fitContent();
     }
     async function updateChange(quote, id, date) {
         try {
@@ -285,10 +341,11 @@
         $('chart-foot').textContent = full ? '已结束：完整区间仅用于复盘，不改变账户日期、现金或报告估值。' : '红涨绿跌 · 仅使用截至公共日期的行情；无未来指标或复权因子。';
         $('order-stock').textContent = stock;
         const quote = state.quotes.find(q => q.stock === stock), pos = state.positions.find(p => p.stock === stock);
-        $('quote-note').textContent = `${statusNames[quote.status] || quote.status} · ${quote.reason || '收盘行情'}${pos.valuation.stale ? ` · 估值价格日期 ${pos.valuation.price_date}` : ''}`;
-        if (full) $('quote-note').textContent = `行情区间 ${state.config.start_date} 至 ${state.config.end_date}；账户估值仍截至 ${state.current_date}`;
+        $('quote-note').textContent = `${statusNames[quote.status] || quote.status}${quote.status !== 'trading' && quote.reason ? ` · ${quote.reason}` : ''}${pos.valuation.stale ? ` · 估值价格日期 ${pos.valuation.price_date}` : ''}`;
+        if (full) $('quote-note').textContent = `完整区间 · ${state.config.start_date} 至 ${state.config.end_date}`;
         $('order-price').innerHTML = quote.bar ? `当前收盘 <strong class="${tone(Number(quote.bar.close)-Number(quote.bar.open))}">${fmt(quote.bar.close)}</strong> 元 / 股` : `${esc(statusNames[quote.status]||quote.status)} · 当前无可交易报价`;
-        $('availability').innerHTML = `可用现金 <b>${fmt(state.account.available_cash)}</b> 元<br>当前可卖 <b>${pos.sellable_now}</b> 股 · 冻结 ${pos.frozen_shares} 股<br>下一开盘可申报卖出 <b>${pos.orderable_next_open}</b> 股<br><small>T+1：当天买入不能当天成交卖出；下一开盘再检查。</small>`;
+        $('order-position').innerHTML = `<div><span>持仓总股数</span><strong>${shares(pos.quantity)} <small>股</small></strong></div><div><span>当前可卖 / 股</span><b>${shares(pos.sellable_now)}</b><span>委托冻结 / 股</span><b>${shares(pos.frozen_shares)}</b></div>`;
+        $('availability').innerHTML = `可用现金 <b>${fmt(state.account.available_cash)}</b> 元<br>当前可卖 <b>${pos.sellable_now}</b> 股 · 冻结 ${pos.frozen_shares} 股<br>下一开盘可申报卖出 <b>${pos.orderable_next_open}</b> 股`;
         ensureCharts(); chartRows=[]; candle?.setData([]); volume?.setData([]);
         for (const series of maSeries.values()) series.setData([]);
         const rows = full ? report.history[stock] : await visibleHistory(stock);
@@ -316,7 +373,7 @@
             if (seq !== estimateSeq || version !== state.version) return;
             const order = result.order, fees = order.estimated_fees;
             estimateValid = order.status === 'pending' && result.version === state.version;
-            $('estimate').innerHTML = `<div class="estimate-execution">${esc(order.execute_on)} 开盘尝试${order.side==='buy'?'买入':'卖出'} ${qty} 股</div><dl><dt>参考收盘价</dt><dd>${fmt(state.quotes.find(q=>q.stock===selectedStock)?.bar?.close)} 元</dd><dt>估算手续费</dt><dd>${fmt(fees.total)} 元</dd><dt>${order.side==='buy'?'本单冻结预算':'本单冻结股数'}</dt><dd>${order.side==='buy'?`${fmt(order.frozen_cash)} 元`:`${order.frozen_shares} 股`}</dd></dl><small>佣金 ${fmt(fees.commission)} + 过户 ${fmt(fees.transfer)} + 印花税 ${fmt(fees.stamp)}</small><p class="${estimateValid?'':'order-reason'}">${esc(estimateValid ? (order.side==='buy'?'预算含价格缓冲；实际按下一开盘价和费用结算，多余冻结退回。':'卖出所得在实际成交后到账；下一开盘再次检查可卖股数。') : order.reason)}</p>`;
+            $('estimate').innerHTML = `<div class="estimate-execution">${esc(order.execute_on)} 开盘 · ${order.side==='buy'?'买入':'卖出'} ${qty} 股</div><dl><dt>参考收盘价</dt><dd>${fmt(state.quotes.find(q=>q.stock===selectedStock)?.bar?.close)} 元</dd><dt>估算手续费</dt><dd>${fmt(fees.total)} 元</dd><dt>${order.side==='buy'?'本单冻结预算':'本单冻结股数'}</dt><dd>${order.side==='buy'?`${fmt(order.frozen_cash)} 元`:`${order.frozen_shares} 股`}</dd></dl><small>佣金 ${fmt(fees.commission)} + 过户 ${fmt(fees.transfer)} + 印花税 ${fmt(fees.stamp)}</small>${estimateValid ? '' : `<p class="order-reason">${esc(order.reason)}</p>`}`;
         } catch (error) { if (seq === estimateSeq) $('estimate').textContent = error.message; }
         finally {controls();}
     }
@@ -390,10 +447,10 @@
     function orderShares() {return PortfolioUI.sharesFromInput($('quantity').value,$('side').value==='sell' && $('odd-lot').checked);}
     function updateQuantityHint() {
         const odd = $('side').value==='sell' && $('odd-lot').checked;
-        $('quantity-label').textContent = odd ? '零股卖出数量 / 股' : '交易数量 / 手（1 手 = 100 股）';
+        $('quantity-label').textContent = odd ? '零股卖出数量 / 股' : '委托数量 / 手';
         $('quantity').max = odd ? '1000000' : '10000';
         const quantity = orderShares();
-        $('quantity-hint').textContent = quantity ? (odd ? `本单卖出 ${quantity} 股；零股须按规则整笔处理。` : `${$('quantity').value} 手 × 100 = ${quantity.toLocaleString('zh-CN')} 股`) : '请填写有效数量。';
+        $('quantity-hint').textContent = quantity ? (odd ? `本单卖出 ${quantity} 股` : `${$('quantity').value} 手 × 100 = ${quantity.toLocaleString('zh-CN')} 股`) : '请填写有效数量。';
     }
     function quantityChanged() {
         stopPlayback('已暂停，方便你调整订单。');
@@ -415,7 +472,7 @@
             message(`日期已推进；${rejected.join('；')}`,true); return false;
         }
         if (!ok) {stopPlayback('自动播放已暂停，请处理页面提示。');return false;}
-        if (!state.next_date) {stopPlayback('已到训练区间末日；可结束训练并查看报告。');return false;}
+        if (state.status === 'ended' || !state.next_date) {stopPlayback('训练已结束，总结已保存。');return false;}
         return true;
     }
     function startPlayback() {
@@ -433,11 +490,54 @@
     }
     function table(headers,rows) {return rows.length ? `<table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">暂无记录</div>';}
     const td = value => `<td>${esc(value)}</td>`;
+    function orderActions(order) {
+        return order.status === 'pending' && state.status === 'active' ? `<div class="order-actions"><button type="button" data-edit-order="${esc(order.order_id)}">撤单并修改</button><button type="button" data-cancel="${esc(order.order_id)}">撤单</button></div>` : '—';
+    }
+    function renderPendingOrders() {
+        const orders = state.orders.filter(order => order.status === 'pending');
+        const expanded = new Set([...$('pending-orders').querySelectorAll('details[open]')].map(node => node.dataset.orderGroup));
+        const groups = new Map();
+        for (const order of [...orders].reverse()) {
+            const key = JSON.stringify([state.training_id,order.stock,order.side,order.execute_on]);
+            if (!groups.has(key)) groups.set(key,{key,stock:order.stock,side:order.side,execute_on:order.execute_on,quantity:0,orders:[]});
+            const group = groups.get(key);
+            group.quantity += order.quantity;
+            group.orders.push(order);
+        }
+        $('pending-orders').hidden = !orders.length || state.status !== 'active';
+        $('pending-orders').innerHTML = `<h3>待成交委托 <span>${orders.length} 笔 · ${groups.size} 组</span></h3>${[...groups.values()].map(group => {
+            const multiple = group.orders.length > 1;
+            const details = multiple ? `<details class="pending-order-details" data-order-group="${esc(group.key)}"${expanded.has(group.key)?' open':''}><summary>查看 ${group.orders.length} 笔明细 / 撤改单</summary>${group.orders.map((order,index) => `<div class="pending-order-item"><p>第 ${index+1} 笔 <b>${shares(order.quantity)} 股</b></p>${orderActions(order)}</div>`).join('')}</details>` : orderActions(group.orders[0]);
+            return `<div class="pending-order"><strong>${esc(stockLabel(group.stock))}</strong><p class="pending-order-total">${group.side==='buy'?'买入':'卖出'}${multiple?'合计':''} <b>${shares(group.quantity)} 股</b>${multiple?` · ${group.orders.length} 笔`:''}</p><p>${esc(group.execute_on)} 开盘</p>${details}</div>`;
+        }).join('')}`;
+    }
+    async function handleOrderAction(event) {
+        const button = event.target.closest('[data-cancel],[data-edit-order]');
+        if (!button || busy || pending) return;
+        const editing = button.hasAttribute('data-edit-order');
+        const order = state.orders.find(order => order.order_id === (button.dataset.editOrder || button.dataset.cancel));
+        if (!order || order.status !== 'pending' || state.status !== 'active') return;
+        stopPlayback();
+        const ok = await mutate('cancel', {order_id:order.order_id});
+        if (!ok || !state.orders.some(row => row.order_id === order.order_id && row.status === 'cancelled')) return;
+        if (!editing) {message('委托已撤销，冻结资金或股数已释放。');return;}
+        selectedStock = order.stock;
+        $('side').value = order.side;
+        $('odd-lot').checked = order.side === 'sell' && order.quantity % 100 !== 0;
+        $('quantity').value = String($('odd-lot').checked ? order.quantity : order.quantity / 100);
+        render();
+        await drawStock();
+        await estimateOrder();
+        message('原委托已撤销，已填回原股票、方向和数量。调整后请重新点击“提交委托”。');
+        $('quantity').scrollIntoView({behavior:'smooth',block:'center'});
+        $('quantity').focus({preventScroll:true});
+    }
     function renderDetails() {
+        renderPendingOrders();
         $('asset-chart').hidden = tab !== 'assets';
         document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected',String(b.dataset.tab === tab)));
-        if (tab === 'positions') $('detail').innerHTML = table(['股票','持有 / 冻结','当前可卖','下一开盘可申报','成本 / 元','估值 / 元','未实现盈亏','估值日期'],state.positions.filter(p=>p.quantity).map(p=>`<tr>${td(stockLabel(p.stock))}${td(`${p.quantity} / ${p.frozen_shares}`)}${td(p.sellable_now)}${td(p.orderable_next_open)}${td(fmt(p.cost))}${td(fmt(p.market_value))}<td class="${tone(p.unrealized_pnl)}">${signed(p.unrealized_pnl)}</td>${td(`${p.valuation.price_date}${p.valuation.stale?' · 历史价':''}`)}</tr>`));
-        if (tab === 'orders') $('detail').innerHTML = table(['股票 / 方向','数量','提交 / 执行日期','冻结现金 / 股数','估算费用','状态','说明','操作'],[...state.orders].reverse().map(o=>`<tr>${td(`${o.stock} ${o.side === 'buy'?'买入':'卖出'}`)}${td(o.quantity)}${td(`${o.submitted_on} / ${o.execute_on}`)}${td(`${fmt(o.frozen_cash)} / ${o.frozen_shares}`)}${td(fmt(o.estimated_fees.total))}${td(orderNames[o.status]||o.status)}<td class="reason">${esc(o.reason)}</td><td>${o.status === 'pending' && state.status === 'active'?`<button data-cancel="${esc(o.order_id)}">撤单</button>`:'—'}</td></tr>`));
+        if (tab === 'positions') $('detail').innerHTML = table(['股票','持仓 / 股','冻结 / 股','当前可卖 / 股','下一开盘可申报 / 股','成本 / 元','估值 / 元','未实现盈亏','估值日期'],state.positions.filter(p=>p.quantity).map(p=>`<tr>${td(stockLabel(p.stock))}<td class="holding-quantity">${shares(p.quantity)}</td>${td(shares(p.frozen_shares))}${td(shares(p.sellable_now))}${td(shares(p.orderable_next_open))}${td(fmt(p.cost))}${td(fmt(p.market_value))}<td class="${tone(p.unrealized_pnl)}">${signed(p.unrealized_pnl)}</td>${td(`${p.valuation.price_date}${p.valuation.stale?' · 历史价':''}`)}</tr>`));
+        if (tab === 'orders') $('detail').innerHTML = table(['股票 / 方向','数量 / 股','提交 / 执行日期','冻结现金 / 股数','估算费用','状态','说明','操作'],[...state.orders].reverse().map(o=>`<tr>${td(`${stockLabel(o.stock)} ${o.side === 'buy'?'买入':'卖出'}`)}${td(shares(o.quantity))}${td(`${o.submitted_on} / ${o.execute_on}`)}${td(`${fmt(o.frozen_cash)} / ${o.frozen_shares}`)}${td(fmt(o.estimated_fees.total))}${td(orderNames[o.status]||o.status)}<td class="reason">${esc(o.reason)}</td><td>${orderActions(o)}</td></tr>`));
         if (tab === 'fills') $('detail').innerHTML = table(['股票 / 方向','成交日','数量','价格','成交金额','佣金','过户费','印花税','费用合计','已实现盈亏'],[...state.fills].reverse().map(f=>`<tr>${td(`${f.stock} ${f.side === 'buy'?'买入':'卖出'}`)}${td(f.date)}${td(f.quantity)}${td(fmt(f.price))}${td(fmt(f.gross))}${td(fmt(f.fees.commission))}${td(fmt(f.fees.transfer))}${td(fmt(f.fees.stamp))}${td(fmt(f.fees.total))}${td(signed(f.realized_pnl))}</tr>`));
         if (tab === 'assets') {
             $('detail').innerHTML = table(['日期','现金','持仓市值','总资产','当日收益'],state.daily_assets.map(a=>`<tr>${td(a.date)}${td(fmt(a.cash))}${td(fmt(a.market_value))}${td(fmt(a.total_assets))}${td(signed(a.daily_pnl))}</tr>`));
@@ -501,7 +601,7 @@
     document.querySelectorAll('[data-lots]').forEach(button=>button.addEventListener('click',()=>{$('odd-lot').checked=false;$('quantity').value=button.dataset.lots;quantityChanged();}));
     for(const [id,step] of [['quantity-minus',-1],['quantity-plus',1]]) $(id).addEventListener('click',()=>{$('quantity').value=String(Math.max(1,(Number($('quantity').value)||1)+step));quantityChanged();});
     $('sell-all').addEventListener('click',()=>{const quantity=state?.positions.find(p=>p.stock===selectedStock)?.orderable_next_open||0;$('odd-lot').checked=quantity%100!==0;$('quantity').value=String($('odd-lot').checked?quantity:quantity/100);quantityChanged();});
-    $('order-form').addEventListener('submit',run(async event=>{event.preventDefault();stopPlayback();if(estimateValid && orderShares())await mutate('orders',{stock:selectedStock,side:$('side').value,quantity:orderShares()});}));
+    $('order-form').addEventListener('submit',run(async event=>{event.preventDefault();stopPlayback();if(estimateValid && orderShares()){const ok=await mutate('orders',{stock:selectedStock,side:$('side').value,quantity:orderShares()});if(ok)message('委托已保存，可在下单区下方撤单或撤单并修改；推进到下一交易日后尝试成交。');}}));
     $('advance').addEventListener('click',run(advancePortfolio));
     $('play').addEventListener('click',()=>{if(playing)stopPlayback();else startPlayback();});
     $('play-speed').addEventListener('change',()=>{if(playing)$('play-status').textContent='播放速度已调整，从下一轮等待起生效；点击“暂停播放”可暂停。';});
@@ -510,13 +610,40 @@
     document.querySelectorAll('[data-ma]').forEach(input=>input.addEventListener('change',drawMovingAverages));
     document.querySelectorAll('[data-chart-view]').forEach(button=>button.addEventListener('click',()=>switchChartView(button.dataset.chartView)));
     $('comparison-legend').addEventListener('change',event=>{const input=event.target.closest('[data-compare]');if(input){if(input.checked)hiddenComparison.delete(input.dataset.compare);else hiddenComparison.add(input.dataset.compare);comparisonLines.get(input.dataset.compare)?.applyOptions({visible:input.checked});showComparisonInfo();}});
-    $('detail').addEventListener('click',run(async event=>{const b=event.target.closest('[data-cancel]');if(b){stopPlayback();await mutate('cancel',{order_id:b.dataset.cancel});}}));
+    $('detail').addEventListener('click',run(handleOrderAction));
+    $('pending-orders').addEventListener('click',run(handleOrderAction));
     document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;renderDetails();}));
     $('chart-mode').addEventListener('change',run(drawStock));
-    $('exit').addEventListener('click',run(async()=>{if(busy||pending)return;stopPlayback();quoteSeq++;estimateSeq++;comparisonSeq++;state=null;report=null;$('workspace').hidden=true;$('lobby').hidden=false;await listTrainings();message('训练已自动保存，下次可继续。');window.scrollTo(0,0);}));
+    async function backToLobby(newTraining = false) {
+        if(busy||pending)return;
+        const ended = state?.status === 'ended';
+        stopPlayback();quoteSeq++;estimateSeq++;comparisonSeq++;state=null;report=null;reviewOpen=false;
+        $('workspace').hidden=true;$('lobby').hidden=false;
+        await listTrainings();message(ended?'总结已保存，可从“已完成的训练”随时查看。':'训练已自动保存，下次可继续。');
+        window.scrollTo(0,0);
+        if (newTraining) $('setup-mode').focus({preventScroll:true});
+    }
+    $('exit').addEventListener('click',run(()=>backToLobby()));
+    $('report-new').addEventListener('click',run(()=>backToLobby(true)));
+    $('report-review').addEventListener('click',run(async()=>{
+        reviewOpen = !reviewOpen;render();
+        if (reviewOpen) {await Promise.all([drawStock(),drawComparison()]);$('review-workspace').scrollIntoView({behavior:'smooth',block:'start'});}
+    }));
     $('end-training').addEventListener('click',()=>{if(!busy&&!pending){stopPlayback();$('end-dialog').showModal();}});
     $('keep-training').addEventListener('click',()=>$('end-dialog').close());
     $('confirm-end').addEventListener('click',run(async()=>{$('end-dialog').close();await mutate('end');}));
+    $('reset-training').addEventListener('click',()=>{
+        if(busy || pending || !state)return;
+        stopPlayback();
+        $('reset-description').textContent = `将回到 ${state.config.start_date}，恢复 ${fmt(state.account.initial_cash)} 元初始资金。`;
+        $('reset-dialog').showModal();
+    });
+    $('keep-progress').addEventListener('click',()=>$('reset-dialog').close());
+    $('confirm-reset').addEventListener('click',run(async()=>{
+        $('reset-dialog').close();
+        const ok = await mutate('reset');
+        if(ok)window.scrollTo(0,0);
+    }));
     $('retry').addEventListener('click',run(async()=>{if(pending&&!busy)await transact(pending.url,pending.body);}));
     run(async()=>{
         const data=await api('/api/users');

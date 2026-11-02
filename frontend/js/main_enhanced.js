@@ -1001,6 +1001,7 @@ function toggleToolbarForTraining(isTraining) {
         document.getElementById('data-sync-btn'),
         document.getElementById('settings-btn'),
         document.getElementById('new-training-btn'),
+        document.getElementById('portfolio-records'),
         document.getElementById('main-title') // 新增的标题元素
     ];
 
@@ -1590,7 +1591,6 @@ function updateTrainingKind() {
     document.getElementById('portfolio-dates').classList.toggle('hidden', !portfolio);
     document.getElementById('portfolio-random-options').classList.toggle('hidden', !portfolio || !random);
     document.getElementById('portfolio-setup-note').classList.toggle('hidden', !portfolio);
-    document.getElementById('portfolio-records').classList.toggle('hidden', !portfolio);
     document.getElementById('start-training-btn').textContent = portfolio ? '开始组合训练' : '开始训练';
 }
 

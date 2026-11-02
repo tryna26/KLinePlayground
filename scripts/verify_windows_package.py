@@ -46,7 +46,7 @@ def main():
                     base=ready['url']
                     try:
                         call('GET','/api/health')
-                        assert ready['frozen'] and Path(ready['home'])==install
+                        assert ready['frozen'] and ready['version']=='4.0.0-rc.2' and Path(ready['home'])==install
                         return child
                     except requests.ConnectionError:pass
             time.sleep(.2)
@@ -110,7 +110,7 @@ def main():
         call('POST',original_path+'/next')
         call('POST',original_path+'/trade',{'action':'sell','quantity':1})
         assert call('POST',original_path+'/end')['final_capital']==99989.
-        result={'status':'passed','version':'4.0.0-rc.1','training_id':state['training_id'],
+        result={'status':'passed','version':'4.0.0-rc.2','training_id':state['training_id'],
             'date':state['current_date'],'cash':state['account']['cash'],'final_assets':report['summary']['final_assets'],
             'checks':['clean installation','frozen resources','real download and admission','shared cash','switch unchanged',
                       'next-open fills','partial sell','pending-order exact restart','resume','report reconciliation','legacy single-stock T+1'],
