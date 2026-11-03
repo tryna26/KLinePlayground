@@ -5,7 +5,7 @@ from pathlib import Path
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='4.0.0-rc.2'
+VERSION='4.0.0'
 
 
 def main():

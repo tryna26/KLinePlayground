@@ -2,7 +2,7 @@
 
 在同一个历史日期，用一份资金管理多只股票，练习选股、仓位分配和调仓，再通过收益曲线与交易记录复盘自己的决策。
 
-**[下载 Windows 版](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.2) · [第一次使用](docs/USER_GUIDE.md) · [版本更新](release_notes_v4.0.0-rc.2.md)**
+**[下载 Windows 正式版](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0) · [第一次使用](docs/USER_GUIDE.md) · [版本更新](release_notes_v4.0.0.md)**
 
 ![组合训练界面](docs/screenshots/portfolio-ui-v2.png)
 
@@ -19,9 +19,9 @@
 
 ## 下载与开始
 
-当前版本为 **4.0.0-rc.2**，提供 Windows 10/11 x64 安装包和便携 ZIP，均需要 Microsoft Edge WebView2 Runtime。
+当前正式版为 **4.0.0**，提供 Windows 10/11 x64 安装包和便携 ZIP，均需要 Microsoft Edge WebView2 Runtime。
 
-1. 从 [GitHub Releases](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0-rc.2) 下载，按同页 `SHA256SUMS.txt` 校验文件。候选包尚未做代码签名。
+1. 从 [GitHub Releases](https://github.com/tryna26/KLinePlayground/releases/tag/v4.0.0) 下载，按同页 `SHA256SUMS.txt` 校验文件。发布包尚未做代码签名。
 2. 安装后启动；便携版解压后运行 `KLinePlayground/bin/KLinePlayground.exe`。
 3. 创建本地用户，点击“新建训练”，选择单股票或组合训练，再选指定模式或随机盲盒。
 4. 组合指定模式输入股票、日期和资金后直接开始，系统自动加载行情，无需先准备三只固定股票的数据。

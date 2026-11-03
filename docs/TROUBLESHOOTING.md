@@ -4,7 +4,7 @@
 
 需要 Windows 10/11 x64 和 Microsoft Edge WebView2 Runtime。安装包不需要管理员权限，默认安装到当前用户的 LocalAppData/Programs/KLinePlayground。程序、数据彼此独立，不覆盖已有其他安装。
 
-没有窗口或启动失败时，先检查安装根目录 logs/desktop.log；WebView2 官方下载： https://developer.microsoft.com/microsoft-edge/webview2/ 。候选包未做代码签名；校验下载页提供的 SHA256 后按系统提示决定是否运行。
+没有窗口或启动失败时，先检查安装根目录 logs/desktop.log；WebView2 官方下载： https://developer.microsoft.com/microsoft-edge/webview2/ 。发布包未做代码签名；校验下载页提供的 SHA256 后按系统提示决定是否运行。
 
 默认行情在安装根目录 data，用户记录在 users，桌面浏览器状态在 webview。可以使用 `KLinePlayground.exe --home <自选目录>` 改用独立目录，或分别使用 `--data-dir` 和 `--users-dir`。卸载保留这些运行资料，备份时在程序关闭后复制整个 data/users 目录；不要把数据写进 bin/_internal。
 

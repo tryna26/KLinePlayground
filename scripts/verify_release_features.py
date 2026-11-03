@@ -1,4 +1,4 @@
-"""Exercise rc.2 features through a frozen EXE using disposable artificial data."""
+"""Exercise release features through a frozen EXE using disposable artificial data."""
 import argparse
 from decimal import Decimal
 import json
@@ -17,7 +17,7 @@ from backend.portfolio_models import serialize
 from backend.replay_models import Evidence, utc_now
 from backend.replay_storage import write_cache
 
-VERSION = '4.0.0-rc.2'
+VERSION = '4.0.0'
 
 
 def main():
