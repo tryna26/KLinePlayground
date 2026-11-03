@@ -1,0 +1,75 @@
+name: Windows release packages
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable version tag to build
+        required: true
+        default: v4.0.0
+      release_id:
+        description: Existing draft release ID for the same version
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: windows-release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.repository == 'tryna26/KLinePlayground'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_ID: ${{ inputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Select the exact release source
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version tag is required' }
+          if ($env:RELEASE_ID -notmatch '^[0-9]+$') { throw 'A numeric release ID is required' }
+          Copy-Item scripts/ci_release_upload.py "$env:RUNNER_TEMP/ci_release_upload.py"
+          git checkout --detach $env:RELEASE_TAG
+          if ($LASTEXITCODE) { throw 'Release tag checkout failed' }
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - run: python -m pip install -r requirements-build.txt
+      - name: Install the pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $installer
+          $expected = '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732'
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Compiler checksum mismatch' }
+          $compilerDir = Join-Path $env:RUNNER_TEMP 'InnoSetup6'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$compilerDir") -Wait -PassThru -WindowStyle Hidden
+          if ($install.ExitCode -ne 0) { throw 'Compiler installation failed' }
+      - name: Build the installer and portable package
+        shell: pwsh
+        run: ./scripts/build_windows.ps1 -Python (Get-Command python).Source -Iscc "$env:RUNNER_TEMP/InnoSetup6/ISCC.exe"
+      - name: Verify the installed and portable applications
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist/release/*-setup.exe | Select-Object -ExpandProperty FullName
+          $installDir = Join-Path $env:GITHUB_WORKSPACE '.runtime/ci-installed'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER','/NOICONS',"/DIR=$installDir") -Wait -PassThru -WindowStyle Hidden
+          if ($install.ExitCode -ne 0) { throw 'Application installation failed' }
+          python scripts/verify_release_features.py --exe .runtime/ci-installed/bin/KLinePlayground.exe --output .runtime/ci-installed-features
+          if ($LASTEXITCODE) { throw 'Installed application verification failed' }
+          $portable = Get-ChildItem dist/release/*-portable.zip | Select-Object -ExpandProperty FullName
+          Expand-Archive -LiteralPath $portable -DestinationPath .runtime/ci-portable
+          python scripts/verify_release_features.py --exe .runtime/ci-portable/KLinePlayground/bin/KLinePlayground.exe --output .runtime/ci-portable-features
+          if ($LASTEXITCODE) { throw 'Portable application verification failed' }
+      - name: Upload verified packages to the release draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python "$env:RUNNER_TEMP/ci_release_upload.py"
